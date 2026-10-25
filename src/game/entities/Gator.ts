@@ -55,12 +55,13 @@ export class Gator extends Actor {
     const toPlayer = new THREE.Vector3(player.pos.x - this.pos.x, 0, player.pos.z - this.pos.z);
     const sees = !player.dead && this.game.world.sameZone(this.pos, player.pos) && toPlayer.length() < GATOR.SIGHT;
     if (sees) this.look.set(toPlayer.x, toPlayer.z).normalize();
+    this.focus(sees, dt);
 
     if (this.spitTime >= 0) {
       this.spitTime += dt;
       if (!this.spitFired && this.spitTime >= GATOR.SPIT_WINDUP) { this.spitFired = true; this.spit(); }
       if (this.spitTime >= GATOR.SPIT_ANIM) this.spitTime = -1;
-    } else if (sees && this.cooldown <= 0) {
+    } else if (sees && this.cooldown <= 0 && !this.reacting) {
       this.spitTime = 0; this.spitFired = false; this.cooldown = GATOR.SPIT_COOLDOWN;
     }
 

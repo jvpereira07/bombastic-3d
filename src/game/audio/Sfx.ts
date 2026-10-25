@@ -12,6 +12,11 @@ export class Sfx {
     for (let i = 0; i < 4; i++) this.audio.noise({ dur: 0.06, freq: 5200, f2: 3800, vol: 0.18, q: 1.2, delay: i * 0.07 });
   }
   slash(): void { this.audio.noise({ dur: 0.13, freq: 3000, f2: 700, vol: 0.22, q: 0.8 }); }
+  /** "!" de um mob que notou o jogador: dois bipes subindo. */
+  alert(): void {
+    this.audio.tone({ f: 880, dur: 0.06, vol: 0.06 });
+    this.audio.tone({ f: 1320, dur: 0.09, vol: 0.06, delay: 0.06 });
+  }
   hit(): void { this.audio.tone({ f: 240, f2: 90, dur: 0.09, vol: 0.2 }); }
   hurt(): void { this.audio.tone({ f: 320, f2: 70, type: 'sawtooth', dur: 0.28, vol: 0.2 }); }
   squeak(): void {

@@ -41,7 +41,8 @@ export class BombRat extends Actor {
       return;
     }
     const chasing = !player.dead && this.game.world.sameZone(this.pos, player.pos);
-    if (chasing) {
+    this.focus(chasing, dt);
+    if (chasing && !this.reacting) {
       this.vel.set(player.pos.x - this.pos.x, 0, player.pos.z - this.pos.z);
       if (this.vel.length() < 1.6) { this.fuse = BombRat.FUSE; this.vel.set(0, 0, 0); }
       else this.vel.normalize().multiplyScalar(BombRat.SPEED);

@@ -186,3 +186,14 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 #combo.bump { animation: combo-bump .18s cubic-bezier(.3, 1.8, .5, 1); }
 @keyframes combo-bump { from { transform: scale(1.25) rotate(-4deg); } }
 @media (prefers-reduced-motion: reduce) { #combo.bump { animation: none; } }
+
+/* ---------- "!" de foco dos mobs ---------- */
+.emote { position: absolute; transform: translate(-50%, -100%); display: grid; place-items: center; width: 30px; height: 36px;
+  background: var(--paper); border: var(--line); border-radius: 8px; box-shadow: 3px 3px 0 #2a1206;
+  font: 700 30px/1 var(--font); color: var(--red); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill;
+  animation: emote-pop .35s cubic-bezier(.3, 1.9, .5, 1) both, emote-bob .5s .35s ease-in-out infinite alternate; }
+.emote::after { content: ''; position: absolute; bottom: -9px; left: 50%; width: 10px; height: 10px; background: var(--paper);
+  border-right: var(--line); border-bottom: var(--line); transform: translateX(-50%) rotate(45deg); }
+@keyframes emote-pop { from { transform: translate(-50%, -100%) scale(0) rotate(-20deg); } }
+@keyframes emote-bob { to { transform: translate(-50%, calc(-100% - 5px)); } }
+@media (prefers-reduced-motion: reduce) { .emote { animation: none; } }

@@ -29,6 +29,7 @@ import { InventoryMenu } from './ui/InventoryMenu';
 import { PauseMenu } from './ui/PauseMenu';
 import { DamageNumbers } from './ui/DamageNumbers';
 import { LockOn } from './ui/LockOn';
+import { Emotes } from './ui/Emotes';
 import type { Hud } from './ui/Hud';
 import { NetClient } from '../net/NetClient';
 import { NET } from '../net/protocol';
@@ -66,6 +67,7 @@ export class Game {
   /** Mobs compartilhados por dono de shard (só existe online). */
   mobSync: MobSync | null = null;
   readonly lockOn: LockOn;
+  readonly emotes: Emotes;
   private readonly damageNumbers: DamageNumbers;
   /** Vida vista no frame anterior, para mostrar o dano (ou cura) de cada criatura. */
   private readonly lastHp = new WeakMap<object, number>();
@@ -82,6 +84,7 @@ export class Game {
     this.remotes = new RemotePlayers(this.scene, assets);
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
     this.lockOn = new LockOn(this);
+    this.emotes = new Emotes(engine.camera);
     this.damageNumbers = new DamageNumbers(engine.camera);
     if (mode === 'test') this.setupTest();
     else { this.spawner.populate(); this.placeItems(); this.stockSewer(this.world.sewer.layout.seed); }
@@ -206,6 +209,7 @@ export class Game {
     this.lockOn.update(dt);
     this.trackDamage();
     this.damageNumbers.update(dt);
+    this.emotes.update(dt);
 
     this.music.set(this.boss.fighting && !this.player.dead);
     this.music.update();

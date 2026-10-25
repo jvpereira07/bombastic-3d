@@ -62,7 +62,9 @@ export class Cucaracha extends Actor {
     if (!canSee || (this.state !== 'wander' && dist > CUCARACHA.LOSE)) { this.state = 'wander'; this.engaged = 0; }
     else if (this.state === 'wander' && dist < CUCARACHA.SIGHT) this.state = 'circle';
 
-    if (this.state === 'lunge') {
+    this.focus(this.state !== 'wander', dt);
+    if (this.reacting && this.state === 'circle') this.vel.set(0, 0, 0);
+    else if (this.state === 'lunge') {
       this.lungeTime += dt;
       this.vel.copy(to).normalize().multiplyScalar(CUCARACHA.LUNGE_SPEED);
       if (!this.lungeHit && dist < 1.1 && Math.abs(target.pos.y - this.pos.y) < 1.5) {
