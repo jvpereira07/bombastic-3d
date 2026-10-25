@@ -16,6 +16,10 @@ async function boot(): Promise<void> {
   const engine = new Engine(canvas);
   const game = new Game(engine, assets, new Input(canvas), new AudioEngine(), new Hud(assets), mode);
   engine.add(game);
+  const params = new URLSearchParams(location.search);
+  if (params.has('online') || params.has('server')) {
+    game.goOnline(params.get('name') ?? `Jogador-${Math.floor(Math.random() * 1000)}`);
+  }
   engine.start();
   Object.assign(window, { game }); // atalho para depurar no console
 }

@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { Assets } from '../engine/Assets';
 import type { AudioEngine } from '../engine/AudioEngine';
 import type { Engine } from '../engine/Engine';
@@ -23,6 +23,18 @@ import type { ItemId } from './items/items';
 import { RatSpawner } from './RatSpawner';
 import { CreativeMenu } from './ui/CreativeMenu';
 import type { Hud } from './ui/Hud';
+import { NetClient } from '../net/NetClient';
+import { NET } from '../net/protocol';
+import { RemotePlayers } from '../net/RemotePlayers';
+import { MobSync } from '../net/MobSync';
+import { Actor } from './entities/Actor';
+
+/** Alguém que os mobs podem perseguir e ferir: o jogador local ou um remoto (o dano vai pela rede). */
+export interface Target {
+  readonly pos: THREE.Vector3;
+  readonly dead: boolean;
+  hurt(damage: number, direction: THREE.Vector3): void;
+}
 import { Overworld } from './world/Overworld';
 import { Sewer } from './world/Sewer';
 import { TestArena } from './world/TestArena';
@@ -39,6 +51,12 @@ export class Game {
   readonly spawner = new RatSpawner(this);
   private readonly music: BossMusic;
   private entities: Entity[] = [];
+  /** Modo online (opcional): conexão e os outros jogadores. */
+  private net: NetClient | null = null;
+  private readonly remotes: RemotePlayers;
+  private netTimer = 0;
+  /** Mobs compartilhados por dono de shard (só existe online). */
+  mobSync: MobSync | null = null;
 
   constructor(readonly engine: Engine, readonly assets: Assets, readonly input: Input, private readonly audio: AudioEngine, readonly hud: Hud, mode: WorldMode = 'normal') {
     this.scene = engine.scene;
@@ -48,16 +66,66 @@ export class Game {
     this.music = new BossMusic(audio);
     this.player = new Player(this);
     this.boss = new MrKabumstic(this);
+    this.remotes = new RemotePlayers(this.scene, assets);
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
     if (mode === 'test') this.setupTest();
     else { this.spawner.populate(); this.placeItems(); this.stockSewer(this.world.sewer.layout.seed); }
     this.bindInput();
   }
 
+  /** Liga o modo online; sem servidor no endereço, o jogo continua offline. */
+  goOnline(name: string, url = NetClient.defaultUrl()): void {
+    this.net = new NetClient(url, name, {
+      onJoin: (id, who) => { this.remotes.join(id, who); this.hud.showBanner(`${who} entrou`); },
+      onLeave: (id) => this.remotes.leave(id),
+      onStates: (list, gone) => this.remotes.states(list, gone, performance.now() / 1000),
+      onStatus: (online) => {
+        if (!online) { this.remotes.clear(); for (const a of this.actors()) if (a.puppet) a.alive = false; }
+        this.hud.setOnline(online ? name : null);
+      },
+      onOwners: (owners) => this.mobSync?.onOwners(owners),
+      onMobs: (list, gone) => this.mobSync?.onMobs(list, gone),
+      onHit: (id, dir) => this.mobSync?.onHit(id, dir),
+      onHurt: (dmg, dir) => this.player.hurt(dmg, new THREE.Vector3(...dir)),
+      onFx: (_k, p) => this.explode(new THREE.Vector3(...p), true),
+    });
+    this.mobSync = new MobSync(this, this.net);
+    this.net.connect();
+  }
+
   // ---------- serviços usados pelas entidades ----------
   spawn<T extends Entity>(entity: T): T { this.entities.push(entity); return entity; }
 
-  explode(at: THREE.Vector3): void { this.spawn(new Explosion(this, at.clone())); }
+  /** Explosão com dano; `remote` = veio de outro cliente, só o efeito (o dano já foi aplicado lá). */
+  explode(at: THREE.Vector3, remote = false): void {
+    this.spawn(new Explosion(this, at.clone(), !remote));
+    if (!remote && this.net?.connected) this.net.sendFx('boom', [at.x, at.y, at.z]);
+  }
+
+  actors(): Actor[] { return this.entities.filter((e): e is Actor => e instanceof Actor); }
+
+  /** Jogadores que os mobs enxergam: eu e os remotos desenhados agora. */
+  targets(): Target[] {
+    const list: Target[] = [this.player];
+    for (const r of this.remotes.active()) {
+      list.push({ pos: r.pos, dead: r.dead, hurt: (dmg, dir) => this.net?.sendHurt(r.id, dmg, [dir.x, dir.y, dir.z]) });
+    }
+    return list;
+  }
+
+  /** Jogador vivo mais perto (na mesma área); sem ninguém, o local. */
+  nearestTarget(from: THREE.Vector3): Target {
+    let best: Target = this.player, bestD = Infinity;
+    for (const t of this.targets()) {
+      if (t.dead || !this.world.sameZone(from, t.pos)) continue;
+      const d = from.distanceToSquared(t.pos);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    return best;
+  }
+
+  /** Online, mob novo só nasce em shard que é meu (os outros donos cuidam dos deles). */
+  maySpawnAt(x: number, z: number): boolean { return this.mobSync?.ownsAt(x, z) ?? true; }
 
   dropItem(item: ItemId, x: number, z: number): void { this.spawn(new Pickup(this, item, x, z)); }
 
@@ -100,10 +168,20 @@ export class Game {
   update(dt: number): void {
     this.player.update(dt);
     this.world.shards.update(this.player.pos);
-    for (const e of this.entities) if (e.alive && this.world.shards.simulates(e.position)) e.update(dt);
+    for (const e of this.entities) {
+      if (!e.alive) continue;
+      if (e instanceof Actor && e.puppet) e.updatePuppet(dt);
+      else if (this.world.shards.simulates(e.position)) e.update(dt);
+    }
     this.boss.update(dt);
     this.removeDead();
     this.world.update(dt, this.player.pos);
+    if (this.net?.connected && (this.netTimer -= dt) <= 0) {
+      this.netTimer = 1 / NET.TICK_HZ;
+      this.net.sendState(this.player.netState());
+      this.mobSync?.tick();
+    }
+    this.remotes.render(performance.now() / 1000, this.camera.yaw, this.engine.camera.position);
 
     const p = this.player.pos, ground = this.world.groundAt(p.x, p.z);
     this.camera.update(dt, p.clone().setY(ground + (p.y - ground) * 0.5 + 1.8)); // só metade do pulo, para não sacudir
@@ -131,7 +209,12 @@ export class Game {
     const cover = this.world.manholeNear(this.player.pos);
     if (!cover || this.player.dead) return;
     this.sfx.manhole();
-    if (Sewer.contains(cover.to.x)) { this.enterSewer(); return; }
+    if (Sewer.contains(cover.to.x)) {
+      // online, a semente vem do servidor: quem desce junto cai na mesma masmorra
+      if (this.net) void this.net.requestSewer().then(({ seed, fresh }) => this.enterSewer(seed, fresh));
+      else this.enterSewer();
+      return;
+    }
     this.arrive(cover.to);
   }
 
@@ -141,17 +224,19 @@ export class Game {
     this.world.applyAtmosphere(this.world.zoneOf(this.player.pos));
   }
 
-  /** Cada descida gera um esgoto novo: troca a masmorra, limpa quem estava lá e repovoa. */
-  enterSewer(): void {
-    const seed = Sewer.newSeed();
+  /**
+   * Cada descida gera um esgoto novo: troca a masmorra, limpa quem estava lá e repovoa.
+   * Online, se outro jogador já está lá (`fresh` = false), a masmorra é a dele e os mobs vêm dele.
+   */
+  enterSewer(seed = Sewer.newSeed(), fresh = true): void {
     this.world.regenerateSewer(seed);
     for (const e of this.entities) {
       const pos = e.position;
       if ((pos && Sewer.contains(pos.x)) || e instanceof RatPlane || e instanceof MusicNote || e instanceof Paratrooper) e.alive = false;
     }
     this.boss.reset();
-    this.spawner.populateSewer();
-    this.stockSewer(seed);
+    if (fresh) { this.spawner.populateSewer(); this.stockSewer(seed); }
+    else this.dropSewerPotions();
     this.arrive(this.world.sewer.entry);
   }
 
@@ -189,6 +274,11 @@ export class Game {
   /** Jacarés nos canais e poções nas salas da masmorra atual. */
   private stockSewer(seed: number): void {
     for (const p of this.world.sewer.waterSpots(4, seed)) this.spawn(new Gator(this, p.x, p.z));
+    this.dropSewerPotions();
+  }
+
+  /** Poções são locais (cada jogador pega as suas), mesmo online. */
+  private dropSewerPotions(): void {
     for (let i = 0; i < 5; i++) { const p = this.world.sewer.randomFloor(); this.dropItem('potion', p.x, p.z); }
   }
 

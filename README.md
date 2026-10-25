@@ -24,6 +24,10 @@ npm run preview    # serve o dist/
 | M | liga/desliga o som |
 | Roda do mouse | zoom |
 
+## Online
+
+`npm run server` sobe o servidor (porta 8787) e `npm run start:online` abre o jogo em `/?online` (use `&name=SeuNome`). Outros jogadores aparecem com nome em cima, os mobs (ratos, ratos-bomba e jacarés) são compartilhados por dono de shard e quem desce no esgoto junto cai na mesma masmorra. Detalhes e limites em [docs/online.md](docs/online.md).
+
 ## Mundo de testes
 
 `npm run start:test` (ou `/?test`) abre um mundo branco e plano, sem ratos. **C** abre o menu criativo (invocar ratos, ratos-bomba, paraquedistas, poções, chapéu, explosões; curar, limpar inimigos, ir ao início ou à arena do chefe) e **R** cria um rato perto do jogador.

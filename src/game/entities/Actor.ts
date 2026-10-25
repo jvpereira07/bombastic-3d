@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import type { SpriteSheet } from '../../engine/SpriteSheet';
-import { facingRow } from '../../engine/math';
+import { damp, facingRow } from '../../engine/math';
+import type { MobKind, MobState } from '../../net/protocol';
 import { PHYSICS } from '../config';
 import type { Game } from '../Game';
 import { Entity, type Hittable } from './Entity';
@@ -18,6 +19,20 @@ export abstract class Actor extends Entity implements Hittable {
   abstract readonly hitRadius: number;
   protected readonly body: Billboard;
   protected readonly sheets: SpriteSheet[];
+
+  // ---------- online ----------
+  /** Tipo no protocolo; null = não é sincronizado (ex.: chefe). */
+  readonly netKind: MobKind | null = null;
+  /** Id na rede (dono + contador); null até ser enviado pela primeira vez. */
+  netId: string | null = null;
+  /** Fantoche: outro cliente simula; aqui só segue o estado recebido. */
+  puppet = false;
+  /** Pose atual (folha/coluna própria de cada tipo), enviada aos outros. */
+  protected poseS = 0;
+  protected poseC = 0;
+  private readonly netPos = new THREE.Vector3();
+  private netHurt = false;
+  private placed = false;
 
   constructor(game: Game, x: number, z: number, public hp: number, sheets: SpriteSheet[], size: number, anchorY: number) {
     super(game);
@@ -45,6 +60,43 @@ export abstract class Actor extends Entity implements Hittable {
     this.pos.y += this.vy * dt;
     const ground = this.game.world.groundAt(this.pos.x, this.pos.z);
     if (this.pos.y <= ground) { this.pos.y = ground; this.vy = 0; }
+  }
+
+  get minionFlag(): boolean { return false; }
+
+  toNet(): MobState {
+    const r = (v: number): number => Math.round(v * 100) / 100;
+    return {
+      id: this.netId!, k: this.netKind!, p: [r(this.pos.x), r(this.pos.y), r(this.pos.z)], d: [r(this.look.x), r(this.look.y)],
+      hp: this.hp, s: this.poseS, c: this.poseC, h: this.hurtTimer > 0, m: this.minionFlag,
+    };
+  }
+
+  /** Recebe o estado do dono; a primeira vez já aparece no lugar, depois desliza até lá. */
+  fromNet(m: MobState): void {
+    this.netPos.set(...m.p);
+    if (!this.placed) { this.pos.copy(this.netPos); this.placed = true; }
+    this.look.set(m.d[0], m.d[1]);
+    this.hp = m.hp; this.poseS = m.s; this.poseC = m.c; this.netHurt = m.h;
+  }
+
+  updatePuppet(dt: number): void {
+    this.pos.lerp(this.netPos, damp(12, dt));
+    this.hurtTimer = this.netHurt ? 0.1 : this.hurtTimer - dt;
+    this.applyPose(this.poseS, this.poseC, facingRow(this.look.x, this.look.y, this.game.camera.yaw));
+    this.syncSprite();
+  }
+
+  /** Desenha a pose (s, c) virada para `facing` (0 costas, 1 esquerda, 2 frente, 3 direita). */
+  protected applyPose(_s: number, _c: number, _facing: number): void { /* cada tipo de mob */ }
+
+  /** Golpe num fantoche vai para quem o simula; devolve true se foi o caso. */
+  protected forwardHit(direction: THREE.Vector3): boolean {
+    if (!this.puppet) return false;
+    this.game.mobSync?.hit(this, direction);
+    this.hurtTimer = 0.15;
+    this.game.sfx.hit();
+    return true;
   }
 
   /** Linha da folha conforme para onde anda, vista pela câmera. */

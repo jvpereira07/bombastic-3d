@@ -8,6 +8,7 @@ import { Inventory } from '../items/Inventory';
 import { ITEMS, type ItemId } from '../items/items';
 import { Entity, type Hittable } from './Entity';
 import { MaracaShot } from './MaracaShot';
+import type { PlayerState, PoseSheet } from '../../net/protocol';
 import { SlashProjectile } from './SlashProjectile';
 
 /** Ordem das linhas do pygame (direita, esquerda, baixo, cima) para as do jogo (costas, esquerda, frente, direita). */
@@ -190,7 +191,7 @@ export class Player extends Entity {
   }
 
   /** Ataque com a maraca: corpo do pygame sem a espada + camada da maraca, na ordem de linhas do jogo. */
-  private static maracaAttackTexture(assets: Game['assets']): THREE.Texture {
+  static maracaAttackTexture(assets: Game['assets']): THREE.Texture {
     const body = assets.texture('player_raw').image as HTMLImageElement;
     const maraca = assets.texture('maraca_anim').image as HTMLImageElement;
     const T = 32, canvas = document.createElement('canvas');
@@ -244,20 +245,35 @@ export class Player extends Entity {
     this.game.onPlayerRespawn();
   }
 
+  /** Quadro atual (folha + coluna), o que os outros jogadores precisam para desenhar este. */
+  readonly pose: { sheet: PoseSheet; col: number } = { sheet: 'move', col: 0 };
+
+  /** Estado enviado ao servidor no modo online. */
+  netState(): PlayerState {
+    const r = (v: number): number => Math.round(v * 100) / 100;
+    return {
+      p: [r(this.pos.x), r(this.pos.y), r(this.pos.z)], d: [r(this.dir.x), r(this.dir.y)],
+      sheet: this.pose.sheet, col: this.pose.col, hat: this.inventory.hasLayer('hat'), dead: this.dead,
+    };
+  }
+
+  private sheetsFor(sheet: PoseSheet): Layered {
+    return sheet === 'dash' ? this.dashSheets : sheet === 'attack' ? this.attackSheets : sheet === 'maraca' ? this.maracaSheets : this.move;
+  }
+
   // ---------- desenho ----------
   private render(moving: boolean): void {
     const row = this.row;
-    let sheets: Layered;
+    const frames = (progress: number, n: number): number => Math.min(n - 1, Math.floor(progress * n));
     if (this.dashing) {
-      sheets = this.dashSheets;
-      sheets.body.setProgress(row, 1 - this.dashTimer / PLAYER.DASH_TIME, 8);
+      this.pose.sheet = 'dash'; this.pose.col = frames(1 - this.dashTimer / PLAYER.DASH_TIME, 8);
     } else if (this.attacking) {
-      sheets = this.weapon === 'maraca' ? this.maracaSheets : this.attackSheets;
-      sheets.body.setProgress(row, this.attackProgress, 6, this.combo * 6);
+      this.pose.sheet = this.weapon === 'maraca' ? 'maraca' : 'attack'; this.pose.col = this.combo * 6 + frames(this.attackProgress, 6);
     } else {
-      sheets = this.move;
-      sheets.body.setFrame(row, !this.grounded ? 2 : moving ? 1 + (Math.floor(this.walkAnim) % 6) : 0);
+      this.pose.sheet = 'move'; this.pose.col = !this.grounded ? 2 : moving ? 1 + (Math.floor(this.walkAnim) % 6) : 0;
     }
+    const sheets = this.sheetsFor(this.pose.sheet);
+    sheets.body.setFrame(row, this.pose.col);
     sheets.hat.texture.offset.copy(sheets.body.texture.offset);
     this.body.setMap(sheets.body.texture);
     this.hat.setMap(sheets.hat.texture);

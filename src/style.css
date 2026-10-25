@@ -25,6 +25,9 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
   background: #1d2340cc; color: #fff; border: 0; border-radius: 999px; padding: 6px 12px; font: 700 13px system-ui, sans-serif; cursor: pointer; }
 #mute:focus-visible { outline: 2px solid var(--gold); }
 
+#online { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
+  background: #1d2340cc; color: #7dffa0; border-radius: 999px; padding: 4px 12px; font: 700 12px system-ui, sans-serif; pointer-events: none; }
+
 #prompt { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 6px 14px; border-radius: 999px; pointer-events: none; font-weight: 700; }
 
 #boss { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 70vw);

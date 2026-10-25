@@ -19,10 +19,11 @@ export class Spit extends Entity {
     this.life -= dt;
     this.pos.addScaledVector(this.dir, GATOR.SPIT_SPEED * dt);
     this.sprite.position.copy(this.pos);
-    const player = this.game.player;
-    if (!player.dead && this.pos.distanceTo(player.pos.clone().setY(player.pos.y + 0.9)) < 0.9) {
-      player.hurt(GATOR.DAMAGE, this.dir);
+    for (const target of this.game.targets()) {
+      if (target.dead || this.pos.distanceTo(target.pos.clone().setY(target.pos.y + 0.9)) >= 0.9) continue;
+      target.hurt(GATOR.DAMAGE, this.dir);
       this.alive = false;
+      return;
     }
     if (this.life <= 0 || this.pos.y < this.game.world.groundAt(this.pos.x, this.pos.z) - 0.5) this.alive = false;
   }

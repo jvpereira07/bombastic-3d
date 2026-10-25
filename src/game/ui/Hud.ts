@@ -35,6 +35,7 @@ export class Hud {
   private readonly banner = $('#banner');
   private readonly prompt = $('#prompt');
   private readonly hint = $('#hint');
+  private readonly online = $('#online');
   private readonly muteButton = $<HTMLButtonElement>('#mute');
   private bannerTimer = 0;
 
@@ -53,6 +54,11 @@ export class Hud {
     this.muteButton.addEventListener('click', (e) => { e.stopPropagation(); handler(); });
   }
   setMuted(muted: boolean): void { this.muteButton.textContent = muted ? '🔇 Som (M)' : '🔊 Som (M)'; }
+  /** Selo do modo online: nome do jogador, ou some quando offline. */
+  setOnline(name: string | null): void {
+    this.online.hidden = name === null;
+    if (name !== null) this.online.textContent = `● Online · ${name}`;
+  }
   setHintVisible(visible: boolean): void { this.hint.hidden = !visible; }
 
   showBanner(text: string): void {

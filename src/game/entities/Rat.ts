@@ -10,6 +10,7 @@ type RatState = 'wander' | 'chase' | 'pounce';
 /** Rato do projeto: passeia, persegue quem chega a 20 m e dá o bote pulando. */
 export class Rat extends Actor {
   readonly hitRadius = 1.3;
+  readonly netKind = 'rat';
   private state: RatState;
   private wanderTimer = 0;
   private readonly wanderDir = new THREE.Vector2();
@@ -31,7 +32,10 @@ export class Rat extends Actor {
 
   get canBeHit(): boolean { return super.canBeHit && this.dying <= 0; }
 
+  get minionFlag(): boolean { return this.minion; }
+
   takeHit(direction: THREE.Vector3): void {
+    if (this.forwardHit(direction)) return;
     this.hp--; this.hurtTimer = 0.15; this.state = 'chase';
     this.vy = 7; this.knockback.copy(direction).setY(0);
     this.game.sfx.hit();
@@ -45,7 +49,7 @@ export class Rat extends Actor {
   kill(): void { this.dying = 0.4; this.hp = 0; }
 
   update(dt: number): void {
-    const player = this.game.player;
+    const player = this.game.nearestTarget(this.pos);
     this.hurtTimer -= dt; this.wanderTimer -= dt; this.pounceCooldown -= dt;
     if (this.dying > 0) {
       this.dying -= dt; this.body.sprite.scale.y *= 0.9;
@@ -89,13 +93,18 @@ export class Rat extends Actor {
     const row = this.facing();
     if (this.state === 'pounce') {
       this.pounceTime += dt;
-      this.body.setMap(this.attack.texture);
-      this.attack.setFrame(row, Math.min(5, Math.floor(this.pounceTime * 12)));
+      this.poseS = 1; this.poseC = Math.min(5, Math.floor(this.pounceTime * 12));
     } else {
       this.anim += dt * (this.vel.lengthSq() > 0.1 ? 12 : 0);
-      this.body.setMap(this.walk.texture);
-      this.walk.setFrame(row, Math.floor(this.anim) % 5);
+      this.poseS = 0; this.poseC = Math.floor(this.anim) % 5;
     }
+    this.applyPose(this.poseS, this.poseC, row);
     this.syncSprite();
+  }
+
+  protected applyPose(s: number, c: number, facing: number): void {
+    const sheet = s === 1 ? this.attack : this.walk;
+    this.body.setMap(sheet.texture);
+    sheet.setFrame(facing, c);
   }
 }

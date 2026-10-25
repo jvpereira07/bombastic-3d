@@ -4,7 +4,7 @@ import { SpriteSheet } from '../../engine/SpriteSheet';
 import type { Game } from '../Game';
 import { Entity } from './Entity';
 
-/** Explosão do projeto (9 quadros de 64 px) com dano em área no jogador. */
+/** Explosão do projeto (9 quadros de 64 px) com dano em área nos jogadores; a que veio da rede é só visual. */
 export class Explosion extends Entity {
   private static readonly LIFE = 0.6;
   private static readonly RADIUS = 2.8;
@@ -13,16 +13,17 @@ export class Explosion extends Entity {
   private readonly sheet: SpriteSheet;
   private readonly sprite: Billboard;
 
-  constructor(game: Game, at: THREE.Vector3) {
+  constructor(game: Game, at: THREE.Vector3, damages = true) {
     super(game);
     this.sheet = new SpriteSheet(game.assets.texture('boom'), 9, 1);
     this.sprite = new Billboard(game.scene, this.sheet.texture, 4.5, 4.5, 0.2);
     this.sprite.position.copy(at);
     game.sfx.boom();
-    const player = game.player;
-    if (!player.dead && at.distanceTo(player.pos) < Explosion.RADIUS) {
-      const push = player.pos.clone().sub(at); push.y = 0;
-      player.hurt(Explosion.DAMAGE, push.normalize());
+    if (!damages) return;
+    for (const target of game.targets()) {
+      if (target.dead || at.distanceTo(target.pos) >= Explosion.RADIUS) continue;
+      const push = target.pos.clone().sub(at); push.y = 0;
+      target.hurt(Explosion.DAMAGE, push.normalize());
     }
   }
 

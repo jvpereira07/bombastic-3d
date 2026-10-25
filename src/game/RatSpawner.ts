@@ -20,13 +20,13 @@ export class RatSpawner {
   spawn(zone: Zone): void {
     if (zone === 'sewer') {
       const p = this.game.world.sewer.randomFloor();
-      this.game.spawn(new Rat(this.game, p.x, p.z));
+      if (this.game.maySpawnAt(p.x, p.z)) this.game.spawn(new Rat(this.game, p.x, p.z));
       return;
     }
     const player = this.game.player.pos;
     let x: number, z: number;
     do { x = rnd(-80, 80); z = rnd(-80, 80); } while (Math.hypot(x - player.x, z - player.z) < RatSpawner.SAFE_DISTANCE);
-    this.game.spawn(new Rat(this.game, x, z));
+    if (this.game.maySpawnAt(x, z)) this.game.spawn(new Rat(this.game, x, z));
   }
 
   scheduleRespawn(zone: Zone): void {
