@@ -42,7 +42,7 @@ function isState(s: unknown): s is PlayerState {
 
 function isMob(m: unknown): m is MobState {
   const v = m as MobState;
-  return !!v && typeof v.id === 'string' && v.id.length < 40 && ['rat', 'bomb', 'gator'].includes(v.k)
+  return !!v && typeof v.id === 'string' && v.id.length < 40 && ['rat', 'bomb', 'gator', 'roach'].includes(v.k)
     && finite(v.p, 3) && finite(v.d, 2) && Number.isFinite(v.hp) && Number.isInteger(v.s) && Number.isInteger(v.c);
 }
 

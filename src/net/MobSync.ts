@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../game/Game';
 import { Actor } from '../game/entities/Actor';
 import { BombRat } from '../game/entities/BombRat';
+import { Cucaracha } from '../game/entities/Cucaracha';
 import { Gator } from '../game/entities/Gator';
 import { Rat } from '../game/entities/Rat';
 import { shardAt, type ShardId } from '../game/world/shards';
@@ -92,6 +93,7 @@ export class MobSync {
     const [x, , z] = m.p;
     if (m.k === 'bomb') return new BombRat(this.game, x, z, m.m);
     if (m.k === 'gator') return new Gator(this.game, x, z);
+    if (m.k === 'roach') return new Cucaracha(this.game, x, z);
     return new Rat(this.game, x, z, m.m);
   }
 }

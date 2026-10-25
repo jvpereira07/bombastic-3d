@@ -34,13 +34,13 @@ export abstract class Actor extends Entity implements Hittable {
   private netHurt = false;
   private placed = false;
 
-  constructor(game: Game, x: number, z: number, public hp: number, sheets: SpriteSheet[], size: number, anchorY: number) {
+  constructor(game: Game, x: number, z: number, public hp: number, sheets: SpriteSheet[], size: number, anchorY: number, height = size) {
     super(game);
     this.pos = new THREE.Vector3(x, game.world.groundAt(x, z), z);
     this.sheets = sheets;
     const first = sheets[0];
     if (!first) throw new Error('Actor sem folha de sprites');
-    this.body = new Billboard(game.scene, first.texture, size, size, anchorY);
+    this.body = new Billboard(game.scene, first.texture, size, height, anchorY);
   }
 
   get position(): THREE.Vector3 { return this.pos; }

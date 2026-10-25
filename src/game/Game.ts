@@ -23,6 +23,8 @@ import type { ItemId } from './items/items';
 import { RatSpawner } from './RatSpawner';
 import { CreativeMenu } from './ui/CreativeMenu';
 import { Modal } from './ui/components';
+import { Cucaracha } from './entities/Cucaracha';
+import { CucarachaMusic } from './audio/CucarachaMusic';
 import { InventoryMenu } from './ui/InventoryMenu';
 import { PauseMenu } from './ui/PauseMenu';
 import { DamageNumbers } from './ui/DamageNumbers';
@@ -55,6 +57,7 @@ export class Game {
   readonly boss: MrKabumstic;
   readonly spawner = new RatSpawner(this);
   private readonly music: BossMusic;
+  private readonly cucarachaMusic: CucarachaMusic;
   private entities: Entity[] = [];
   /** Modo online (opcional): conexão e os outros jogadores. */
   private net: NetClient | null = null;
@@ -73,6 +76,7 @@ export class Game {
     this.camera = new ThirdPersonCamera(engine.camera, this.world);
     this.sfx = new Sfx(audio);
     this.music = new BossMusic(audio);
+    this.cucarachaMusic = new CucarachaMusic(audio);
     this.player = new Player(this);
     this.boss = new MrKabumstic(this);
     this.remotes = new RemotePlayers(this.scene, assets);
@@ -141,7 +145,8 @@ export class Game {
   dropItem(item: ItemId, x: number, z: number): void { this.spawn(new Pickup(this, item, x, z)); }
 
   hittables(): Hittable[] {
-    const targets: Hittable[] = this.entities.filter((e): e is Rat | BombRat | Gator => e instanceof Rat || e instanceof BombRat || e instanceof Gator);
+    const targets: Hittable[] = this.entities.filter((e): e is Rat | BombRat | Gator | Cucaracha =>
+      e instanceof Rat || e instanceof BombRat || e instanceof Gator || e instanceof Cucaracha);
     targets.push(this.boss);
     return targets;
   }
@@ -159,7 +164,7 @@ export class Game {
 
   /** Remove todos os ratos e paraquedistas (mundo de testes). */
   clearEnemies(): void {
-    for (const e of this.entities) if (e instanceof Rat || e instanceof BombRat || e instanceof Paratrooper || e instanceof Gator) e.alive = false;
+    for (const e of this.entities) if (e instanceof Rat || e instanceof BombRat || e instanceof Paratrooper || e instanceof Gator || e instanceof Cucaracha) e.alive = false;
   }
 
   clearMinions(): void {
@@ -204,6 +209,10 @@ export class Game {
 
     this.music.set(this.boss.fighting && !this.player.dead);
     this.music.update();
+    // La Cucaracha toca enquanto algum bando dança em roda por perto (e o chefe não está tocando a dele)
+    const dancing = !this.boss.fighting && this.entities.some((e) => e instanceof Cucaracha && e.dancing && e.pos.distanceTo(p) < 30);
+    this.cucarachaMusic.set(dancing);
+    this.cucarachaMusic.update();
     if (Sewer.contains(p.x) && Math.random() < dt * 0.6) this.sfx.drip();
 
     this.hud.render({

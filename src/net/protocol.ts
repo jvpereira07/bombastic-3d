@@ -26,7 +26,7 @@ export interface PlayerState {
   dead: boolean;
 }
 
-export type MobKind = 'rat' | 'bomb' | 'gator';
+export type MobKind = 'rat' | 'bomb' | 'gator' | 'roach';
 
 /** Estado de um mob simulado pelo dono do shard. `s`/`c` = pose (folha/coluna) própria de cada tipo. */
 export interface MobState {
