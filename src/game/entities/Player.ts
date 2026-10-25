@@ -101,6 +101,9 @@ export class Player extends Entity {
     this.game.sfx.pickup();
   }
 
+  /** Empunha uma arma específica (pelo inventário). */
+  wield(weapon: Weapon): void { if (weapon !== this.weapon) this.switchWeapon(); }
+
   dash(): void {
     if (!this.inventory.hasAbility('dash') || this.dead || this.dashing || this.dashCooldown > 0 || this.stamina < PLAYER.DASH_COST) return;
     this.stamina -= PLAYER.DASH_COST;

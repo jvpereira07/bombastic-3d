@@ -44,7 +44,6 @@ export class Hud {
     this.hpFill.style.backgroundImage = `url(${assets.url('ui_hp_full')})`;
     $('#stBar').style.backgroundImage = `url(${assets.url('ui_st_empty')})`;
     this.stFill.style.backgroundImage = `url(${assets.url('ui_st_full')})`;
-    for (const slot of document.querySelectorAll<HTMLElement>('.slot')) slot.style.backgroundImage = `url(${assets.url('ui_slot')})`;
     $<HTMLImageElement>('#potImg').src = assets.url(ITEMS.potion.icon);
     $<HTMLImageElement>('#hatImg').src = assets.url(ITEMS.sombrero.icon);
     this.weaponIcons = { sword: assets.url('sword'), maraca: assets.url(ITEMS.maraca.icon) };

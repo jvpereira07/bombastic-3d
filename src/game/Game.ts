@@ -22,6 +22,9 @@ import { Rat } from './entities/Rat';
 import type { ItemId } from './items/items';
 import { RatSpawner } from './RatSpawner';
 import { CreativeMenu } from './ui/CreativeMenu';
+import { Modal } from './ui/components';
+import { InventoryMenu } from './ui/InventoryMenu';
+import { PauseMenu } from './ui/PauseMenu';
 import type { Hud } from './ui/Hud';
 import { NetClient } from '../net/NetClient';
 import { NET } from '../net/protocol';
@@ -166,6 +169,7 @@ export class Game {
 
   // ---------- laço ----------
   update(dt: number): void {
+    if (Modal.anyOpen && !this.net) return; // offline, menu aberto pausa o jogo
     this.player.update(dt);
     this.world.shards.update(this.player.pos);
     for (const e of this.entities) {
@@ -245,16 +249,24 @@ export class Game {
     input.onLook((dx, dy) => this.camera.rotate(dx, dy));
     input.onZoom((d) => this.camera.zoom(d));
     input.onLockedClick(() => player.attack());
-    input.onLockChange((locked) => this.hud.setHintVisible(!locked));
+    input.onLockChange((locked) => this.hud.setHintVisible(!locked && !Modal.anyOpen));
     input.onKey(['Space'], () => player.jump());
     input.onKey(['KeyF', 'KeyJ'], () => player.attack());
     input.onKey(['KeyQ', 'Digit1'], () => player.drinkPotion());
     input.onKey(['ShiftLeft', 'ShiftRight'], () => player.dash());
     input.onKey(['KeyG'], () => player.switchWeapon());
     input.onKey(['KeyE'], () => this.useManhole());
-    const toggleMute = (): void => this.hud.setMuted(this.audio.toggleMute());
+    const toggleMute = (): boolean => { const muted = this.audio.toggleMute(); this.hud.setMuted(muted); return muted; };
     input.onKey(['KeyM'], toggleMute);
     this.hud.onMuteClick(toggleMute);
+
+    input.blocked = () => Modal.anyOpen;
+    const inventory = new InventoryMenu(player, this.assets);
+    const pause = new PauseMenu({ inventory: () => inventory.toggle(true), toggleMute, muted: () => this.audio.isMuted });
+    input.onKey(['Tab', 'KeyI'], () => { if (!pause.open) inventory.toggle(); }, true);
+    input.onKey(['KeyP'], () => (Modal.anyOpen && !pause.open ? Modal.closeAll() : pause.toggle()), true);
+    input.onKey(['Escape'], () => (Modal.anyOpen ? Modal.closeAll() : pause.toggle(true)), true);
+    Modal.onChange((open) => this.hud.setHintVisible(!open && !input.locked));
   }
 
   /** Mundo de testes: sem ratos, itens ao lado do início; R cria um rato perto do jogador, C abre o menu criativo. */
