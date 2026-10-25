@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Bombastic 3D</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div class="bar" id="hpBar"><i></i><b id="hpTxt">100</b></div>
+      <div class="bar st" id="stBar"><i></i></div>
+    </div>
+    <div id="slots">
+      <div class="slot" id="potSlot"><span class="k">Q</span><img id="potImg" alt="Poção de vida" /><span class="n" id="potN">0</span></div>
+      <div class="slot off" id="hatSlot"><span class="k">Shift</span><img id="hatImg" alt="Chapéu do Ligeirinho" /></div>
+    </div>
+    <button id="mute" type="button">🔊 Som (M)</button>
+    <div id="boss" hidden><b>Mr. Kabumstic</b><span><i></i></span></div>
+    <div id="banner" hidden></div>
+    <div id="prompt" hidden>E · usar a tampa do esgoto</div>
+    <div id="hint">
+      Clique para controlar a câmera com o mouse · WASD anda · Espaço pula · clique ou F ataca · Q bebe poção ·
+      Shift dash (com o chapéu) · E usa a tampa do esgoto · M som · Esc solta<br />
+      <small>Sprites e tiles: projeto bombastic-pygame (jvpereira07)</small>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

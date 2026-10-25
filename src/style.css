@@ -1,0 +1,39 @@
+:root { --sky: #8fd3ff; --ink: #1d2340; --card: #ffffffd9; --gold: #ffcf3a; color-scheme: light; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--sky); color: var(--ink); overflow: hidden; user-select: none; font: 600 14px system-ui, sans-serif; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; touch-action: none; }
+
+#hint { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  background: var(--card); padding: 8px 16px; border-radius: 999px; pointer-events: none; text-align: center; max-width: calc(100% - 32px); }
+
+#hud { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none; image-rendering: pixelated; }
+.bar { position: relative; width: 370px; max-width: 46vw; aspect-ratio: 185 / 32; background-size: 100% 100%; }
+.bar.st { aspect-ratio: 183 / 35; }
+.bar i { position: absolute; inset: 0 auto 0 0; overflow: hidden; background-size: auto 100%; background-repeat: no-repeat; transition: width .12s; }
+.bar b { position: absolute; left: 6%; top: 50%; transform: translateY(-50%); color: #fff; font: 800 13px system-ui, sans-serif; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+
+#slots { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); right: max(14px, env(safe-area-inset-right, 0px)); display: flex; gap: 10px; pointer-events: none; }
+.slot { position: relative; width: 64px; height: 64px; background-size: 100% 100%; image-rendering: pixelated; display: grid; place-items: center; }
+.slot img { width: 46px; height: 46px; image-rendering: pixelated; }
+.slot.off img { filter: grayscale(1) brightness(.35); }
+.slot .n { position: absolute; right: 2px; bottom: 0; color: #fff; font: 800 15px system-ui, sans-serif; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+.slot .k { position: absolute; left: -2px; top: -4px; background: var(--ink); color: #fff; font: 800 11px system-ui, sans-serif; padding: 1px 6px; border-radius: 6px; }
+
+#mute { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
+  background: #1d2340cc; color: #fff; border: 0; border-radius: 999px; padding: 6px 12px; font: 700 13px system-ui, sans-serif; cursor: pointer; }
+#mute:focus-visible { outline: 2px solid var(--gold); }
+
+#prompt { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 6px 14px; border-radius: 999px; pointer-events: none; font-weight: 700; }
+
+#boss { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 70vw);
+  color: #fff; text-align: center; font-weight: 800; text-shadow: 0 2px 0 #000; pointer-events: none; }
+#boss span { display: block; height: 14px; background: #0008; border: 2px solid #1a1a1a; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+#boss i { display: block; height: 100%; width: 100%; background: linear-gradient(var(--gold), #e0a020); transition: width .15s; }
+
+#banner { position: fixed; top: 30%; left: 50%; transform: translateX(-50%); font: 900 clamp(24px, 5vw, 44px) system-ui, sans-serif;
+  color: var(--gold); text-shadow: 0 3px 0 #000, 0 0 18px #000; pointer-events: none; text-align: center; white-space: nowrap; }
+
+.boot-error { position: fixed; inset: auto 16px 16px; background: #fff; color: #a00; padding: 12px; border-radius: 8px; }
+[hidden] { display: none !important; }
