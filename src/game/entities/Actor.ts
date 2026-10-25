@@ -84,7 +84,7 @@ export abstract class Actor extends Entity implements Hittable {
   protected focus(on: boolean, dt: number): void {
     this.reactTimer -= dt;
     if (on && !this.focused && !this.minionFlag) {
-      this.game.emotes.alert(this.pos, this.height + 0.3);
+      this.game.emotes.alert(this.pos, this.height * 0.7);
       this.game.sfx.alert();
       this.reactTimer = ACTOR_REACT_TIME;
       if (this.onGround) this.vy = 4;

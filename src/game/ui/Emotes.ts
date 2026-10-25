@@ -2,9 +2,9 @@ import * as THREE from 'three';
 
 interface Emote { el: HTMLElement; anchor: THREE.Vector3; height: number; age: number }
 
-/** Balõezinhos sobre a cabeça (ex.: "!" quando um mob nota o jogador). Seguem o mob enquanto duram. */
+/** Partículas de texto sobre a cabeça (ex.: "!" quando um mob nota o jogador). Seguem o mob e sobem um pouco. */
 export class Emotes {
-  private static readonly LIFE = 1.1;
+  private static readonly LIFE = 0.9;
   private readonly layer = document.createElement('div');
   private readonly live: Emote[] = [];
   private readonly scratch = new THREE.Vector3();
@@ -28,7 +28,8 @@ export class Emotes {
       const e = this.live[i]!;
       e.age += dt;
       if (e.age >= Emotes.LIFE) { e.el.remove(); this.live.splice(i, 1); continue; }
-      const p = this.scratch.copy(e.anchor).setY(e.anchor.y + e.height).project(this.camera);
+      const rise = Math.min(1, e.age / 0.3) * 0.4; // sobe um pouquinho ao aparecer
+      const p = this.scratch.copy(e.anchor).setY(e.anchor.y + e.height + rise).project(this.camera);
       e.el.hidden = p.z > 1;
       const t = e.age / Emotes.LIFE;
       e.el.style.opacity = String(t < 0.8 ? 1 : 1 - (t - 0.8) / 0.2);
