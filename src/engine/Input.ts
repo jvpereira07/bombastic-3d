@@ -9,6 +9,7 @@ export class Input {
   private readonly lookHandlers: LookHandler[] = [];
   private readonly zoomHandlers: ((delta: number) => void)[] = [];
   private readonly lockedClickHandlers: (() => void)[] = [];
+  private readonly altClickHandlers: (() => void)[] = [];
   private readonly lockChangeHandlers: ((locked: boolean) => void)[] = [];
   private drag: { x: number; y: number } | null = null;
   /** Quando devolve true (ex.: menu aberto), o jogo não recebe teclas, cliques nem movimento. */
@@ -39,6 +40,8 @@ export class Input {
       this.emitLook((e.clientX - this.drag.x) * 2, (e.clientY - this.drag.y) * 2);
       this.drag = { x: e.clientX, y: e.clientY };
     });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('mousedown', (e) => { if (e.button === 2 && !this.blocked()) for (const h of this.altClickHandlers) h(); });
     canvas.addEventListener('wheel', (e) => { e.preventDefault(); for (const h of this.zoomHandlers) h(e.deltaY); }, { passive: false });
   }
 
@@ -62,6 +65,8 @@ export class Input {
   onLook(h: LookHandler): void { this.lookHandlers.push(h); }
   onZoom(h: (delta: number) => void): void { this.zoomHandlers.push(h); }
   onLockedClick(h: () => void): void { this.lockedClickHandlers.push(h); }
+  /** Botão direito do mouse. */
+  onAltClick(h: () => void): void { this.altClickHandlers.push(h); }
   onLockChange(h: (locked: boolean) => void): void { this.lockChangeHandlers.push(h); }
 
   private emitLook(dx: number, dy: number): void { for (const h of this.lookHandlers) h(dx, dy); }

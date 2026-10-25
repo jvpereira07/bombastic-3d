@@ -21,6 +21,12 @@ export class ThirdPersonCamera {
     this.targetPitch = clamp(this.targetPitch + dy * ThirdPersonCamera.SENSITIVITY, -0.15, 1.2);
   }
 
+  /** Puxa o giro para `yaw` (pelo lado mais curto); usado pela trava de mira. */
+  face(yaw: number, dt: number): void {
+    const diff = Math.atan2(Math.sin(yaw - this.targetYaw), Math.cos(yaw - this.targetYaw));
+    this.targetYaw += diff * damp(8, dt);
+  }
+
   zoom(delta: number): void { this.targetDistance = clamp(this.targetDistance + delta * 0.01, 4, 20); }
 
   /** Teleporte: corta a suavização. */

@@ -25,6 +25,8 @@ import { CreativeMenu } from './ui/CreativeMenu';
 import { Modal } from './ui/components';
 import { InventoryMenu } from './ui/InventoryMenu';
 import { PauseMenu } from './ui/PauseMenu';
+import { DamageNumbers } from './ui/DamageNumbers';
+import { LockOn } from './ui/LockOn';
 import type { Hud } from './ui/Hud';
 import { NetClient } from '../net/NetClient';
 import { NET } from '../net/protocol';
@@ -60,6 +62,10 @@ export class Game {
   private netTimer = 0;
   /** Mobs compartilhados por dono de shard (só existe online). */
   mobSync: MobSync | null = null;
+  readonly lockOn: LockOn;
+  private readonly damageNumbers: DamageNumbers;
+  /** Vida vista no frame anterior, para mostrar o dano (ou cura) de cada criatura. */
+  private readonly lastHp = new WeakMap<object, number>();
 
   constructor(readonly engine: Engine, readonly assets: Assets, readonly input: Input, private readonly audio: AudioEngine, readonly hud: Hud, mode: WorldMode = 'normal') {
     this.scene = engine.scene;
@@ -71,6 +77,8 @@ export class Game {
     this.boss = new MrKabumstic(this);
     this.remotes = new RemotePlayers(this.scene, assets);
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
+    this.lockOn = new LockOn(this);
+    this.damageNumbers = new DamageNumbers(engine.camera);
     if (mode === 'test') this.setupTest();
     else { this.spawner.populate(); this.placeItems(); this.stockSewer(this.world.sewer.layout.seed); }
     this.bindInput();
@@ -190,6 +198,10 @@ export class Game {
     const p = this.player.pos, ground = this.world.groundAt(p.x, p.z);
     this.camera.update(dt, p.clone().setY(ground + (p.y - ground) * 0.5 + 1.8)); // só metade do pulo, para não sacudir
 
+    this.lockOn.update(dt);
+    this.trackDamage();
+    this.damageNumbers.update(dt);
+
     this.music.set(this.boss.fighting && !this.player.dead);
     this.music.update();
     if (Sewer.contains(p.x) && Math.random() < dt * 0.6) this.sfx.drip();
@@ -200,6 +212,24 @@ export class Game {
       boss: { visible: this.boss.fighting, hp: this.boss.hp, maxHp: BOSS.HP },
       showManholePrompt: !this.player.dead && this.world.manholeNear(p) !== undefined,
     });
+  }
+
+  /** Compara a vida de cada criatura com o frame anterior e solta o número do que mudou. */
+  private trackDamage(): void {
+    const creatures: { key: object; hp: number; at: THREE.Vector3; isPlayer: boolean }[] = [
+      { key: this.player, hp: this.player.hp, at: this.player.pos, isPlayer: true },
+      { key: this.boss, hp: this.boss.hp, at: this.boss.pos, isPlayer: false },
+      ...this.actors().map((a) => ({ key: a, hp: a.hp, at: a.pos, isPlayer: false })),
+    ];
+    for (const c of creatures) {
+      const before = this.lastHp.get(c.key);
+      this.lastHp.set(c.key, c.hp);
+      if (before === undefined || before === c.hp) continue;
+      const head = c.at.clone().setY(c.at.y + (c.key === this.boss ? 3 : 1.6));
+      const delta = Math.round(Math.abs(c.hp - before));
+      if (c.hp < before) this.damageNumbers.spawn(head, delta, c.isPlayer ? 'player' : 'enemy');
+      else if (c.isPlayer && !this.player.dead && before > 0) this.damageNumbers.spawn(head, delta, 'heal');
+    }
   }
 
   private removeDead(): void {
@@ -256,6 +286,8 @@ export class Game {
     input.onKey(['ShiftLeft', 'ShiftRight'], () => player.dash());
     input.onKey(['KeyG'], () => player.switchWeapon());
     input.onKey(['KeyE'], () => this.useManhole());
+    input.onKey(['KeyT'], () => this.lockOn.toggle());
+    input.onAltClick(() => this.lockOn.toggle());
     const toggleMute = (): boolean => { const muted = this.audio.toggleMute(); this.hud.setMuted(muted); return muted; };
     input.onKey(['KeyM'], toggleMute);
     this.hud.onMuteClick(toggleMute);

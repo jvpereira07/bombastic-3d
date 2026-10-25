@@ -92,6 +92,12 @@ export class Player extends Entity {
       this.dir.set(-Math.sin(yaw), -Math.cos(yaw));
       this.game.sfx.maraca();
     } else this.game.sfx.slash();
+    // com a mira travada, o golpe sai sempre na direção do alvo
+    const target = this.game.lockOn.target;
+    if (target) {
+      const dx = target.pos.x - this.pos.x, dz = target.pos.z - this.pos.z;
+      if (Math.hypot(dx, dz) > 0.01) this.dir.set(dx, dz).normalize();
+    }
   }
 
   /** Troca entre espada e maraca (a maraca vai na segunda mão; precisa tê-la). */
