@@ -36,4 +36,17 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
   color: var(--gold); text-shadow: 0 3px 0 #000, 0 0 18px #000; pointer-events: none; text-align: center; white-space: nowrap; }
 
 .boot-error { position: fixed; inset: auto 16px 16px; background: #fff; color: #a00; padding: 12px; border-radius: 8px; }
+#creative { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100% - 32px));
+  max-height: calc(100% - 32px); overflow: auto; background: var(--card); border-radius: 16px; padding: 16px; box-shadow: 0 8px 32px #0003; }
+#creative h2 { margin: 0; font-size: 18px; }
+#creative p { margin: 2px 0 12px; font-weight: 500; opacity: .7; font-size: 13px; }
+#creative .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+#creative .grid + .grid { margin-top: 12px; padding-top: 12px; border-top: 1px solid #1d234022; }
+#creative button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; border: 2px solid #1d234022; border-radius: 10px;
+  background: #fff; color: var(--ink); font: 700 13px system-ui, sans-serif; cursor: pointer; }
+#creative button:hover { border-color: var(--gold); }
+#creative button:focus-visible { outline: 2px solid var(--gold); }
+#creative .icon { width: 40px; height: 40px; background-repeat: no-repeat; image-rendering: pixelated; }
+#creative .actions button { flex-direction: row; justify-content: center; min-height: 40px; }
+
 [hidden] { display: none !important; }

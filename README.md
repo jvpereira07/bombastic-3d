@@ -23,6 +23,10 @@ npm run preview    # serve o dist/
 | M | liga/desliga o som |
 | Roda do mouse | zoom |
 
+## Mundo de testes
+
+`npm run start:test` (ou `/?test`) abre um mundo branco e plano, sem ratos. **C** abre o menu criativo (invocar ratos, ratos-bomba, paraquedistas, poções, chapéu, explosões; curar, limpar inimigos, ir ao início ou à arena do chefe) e **R** cria um rato perto do jogador.
+
 ## Estrutura
 
 ```

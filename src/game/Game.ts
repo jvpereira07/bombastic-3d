@@ -20,6 +20,7 @@ import { Player } from './entities/Player';
 import { Rat } from './entities/Rat';
 import type { ItemId } from './items/items';
 import { RatSpawner } from './RatSpawner';
+import { CreativeMenu } from './ui/CreativeMenu';
 import type { Hud } from './ui/Hud';
 import { Overworld } from './world/Overworld';
 import { Sewer } from './world/Sewer';
@@ -73,6 +74,11 @@ export class Game {
   /** Ratos comuns do esgoto morrem quando a luta começa. */
   onBossFightStart(): void {
     for (const e of this.entities) if (e instanceof Rat && !e.minion && Sewer.contains(e.pos.x)) { e.kill(); }
+  }
+
+  /** Remove todos os ratos e paraquedistas (mundo de testes). */
+  clearEnemies(): void {
+    for (const e of this.entities) if (e instanceof Rat || e instanceof BombRat || e instanceof Paratrooper) e.alive = false;
   }
 
   clearMinions(): void {
@@ -143,8 +149,10 @@ export class Game {
     this.hud.onMuteClick(toggleMute);
   }
 
-  /** Mundo de testes: sem ratos, itens ao lado do início; R cria um rato perto do jogador. */
+  /** Mundo de testes: sem ratos, itens ao lado do início; R cria um rato perto do jogador, C abre o menu criativo. */
   private setupTest(): void {
+    new CreativeMenu(this);
+    this.hud.showBanner('Mundo de testes · C abre o menu criativo');
     for (let i = 0; i < 3; i++) this.dropItem('potion', -3 + i * 3, 4);
     this.dropItem('sombrero', 0, -4);
     this.input.onKey(['KeyR'], () => {
