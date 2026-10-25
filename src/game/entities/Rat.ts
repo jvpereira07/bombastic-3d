@@ -34,9 +34,9 @@ export class Rat extends Actor {
 
   get minionFlag(): boolean { return this.minion; }
 
-  takeHit(direction: THREE.Vector3): void {
+  takeHit(direction: THREE.Vector3, damage = 1): void {
     if (this.forwardHit(direction)) return;
-    this.hp--; this.hurtTimer = 0.15; this.state = 'chase';
+    this.hp -= damage; this.hurtTimer = 0.15; this.state = 'chase';
     this.vy = 7; this.knockback.copy(direction).setY(0);
     this.game.sfx.hit();
     if (this.hp <= 0) {

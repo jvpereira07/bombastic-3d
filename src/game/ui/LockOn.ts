@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Hittable } from '../entities/Entity';
+import { AIM_ASSIST } from '../config';
 import type { Game } from '../Game';
 
 /** Trava de mira (T ou botão direito): escolhe o inimigo mais à frente, vira a câmera para ele e desenha a retícula. */
@@ -24,6 +25,27 @@ export class LockOn {
   }
 
   release(): void { this.target = null; }
+
+  /**
+   * Mira assistida: direção (x, z) para onde o golpe deve sair. Com trava, o alvo travado;
+   * sem trava, o inimigo mais perto do ângulo pretendido dentro do cone e do alcance; senão `wanted`.
+   */
+  assist(from: THREE.Vector3, wanted: THREE.Vector2, range: number): THREE.Vector2 {
+    const toward = (t: Hittable): THREE.Vector2 => new THREE.Vector2(t.pos.x - from.x, t.pos.z - from.z);
+    if (this.target) { const d = toward(this.target); return d.lengthSq() > 1e-4 ? d.normalize() : wanted; }
+    const minDot = Math.cos((AIM_ASSIST.CONE * Math.PI) / 180), want = wanted.clone().normalize();
+    let best: THREE.Vector2 | null = null, bestScore = Infinity;
+    for (const t of this.game.hittables()) {
+      if (!t.canBeHit || !this.game.world.sameZone(t.pos, from)) continue;
+      const d = toward(t), dist = d.length();
+      if (dist > range + t.hitRadius || dist < 1e-3) continue;
+      const dot = d.divideScalar(dist).dot(want);
+      if (dot < minDot) continue;
+      const score = dist * (2 - dot); // perto e alinhado ganha
+      if (score < bestScore) { bestScore = score; best = d.clone(); }
+    }
+    return best ?? want;
+  }
 
   /** Altura do centro do alvo (o chefe é maior). */
   aimPoint(t: Hittable): THREE.Vector3 { return this.scratch.copy(t.pos).setY(t.pos.y + Math.max(0.9, t.hitRadius * 0.8)); }

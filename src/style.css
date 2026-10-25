@@ -176,3 +176,13 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 .dmg.player { color: var(--red); font-size: 30px; }
 .dmg.heal { color: var(--green); }
 @media (prefers-reduced-motion: reduce) { .reticle i { animation: none; transform: translate(calc(var(--dx) * 18px - 7px), calc(var(--dy) * 18px - 7px)); } }
+
+/* ---------- combo ---------- */
+#combo { display: flex; align-items: center; gap: 6px; align-self: flex-start; margin-top: 2px; padding: 4px 10px; background: var(--paper);
+  border: var(--line); border-radius: var(--radius); box-shadow: var(--shadow); font: 700 13px var(--font); text-transform: uppercase; }
+#combo i { width: 14px; height: 14px; background: #fff3d1; border: 2px solid var(--ink); transform: rotate(45deg); margin: 0 2px; }
+#combo i.on { background: var(--gold); box-shadow: 2px 2px 0 var(--ink); }
+#combo.finisher i.on { background: var(--red); }
+#combo.bump { animation: combo-bump .18s cubic-bezier(.3, 1.8, .5, 1); }
+@keyframes combo-bump { from { transform: scale(1.25) rotate(-4deg); } }
+@media (prefers-reduced-motion: reduce) { #combo.bump { animation: none; } }

@@ -1,7 +1,7 @@
 import { button, h, Modal, tabs } from './components';
 
 const CONTROLS: [string, string][] = [
-  ['WASD', 'Andar'], ['Espaço', 'Pular'], ['Clique / F', 'Atacar'], ['T / botão direito', 'Travar/soltar mira'], ['G', 'Trocar espada/maraca'], ['Q', 'Beber poção'],
+  ['WASD', 'Andar'], ['Espaço', 'Pular'], ['Clique / F', 'Atacar (emende 3 para o combo)'], ['T / botão direito', 'Travar/soltar mira'], ['G', 'Trocar espada/maraca'], ['Q', 'Beber poção'],
   ['Shift', 'Dash (com o chapéu)'], ['E', 'Tampa do esgoto'], ['Tab / I', 'Inventário'], ['P / Esc', 'Pausa'], ['M', 'Som'],
 ];
 

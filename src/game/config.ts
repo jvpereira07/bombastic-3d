@@ -19,6 +19,18 @@ export const PLAYER = {
   SPRITE_SIZE: 2.6, SLASH_KNOCKBACK: 28, DASH_KNOCKBACK: 24,
 } as const;
 
+/**
+ * Combo de 3 golpes: apertar de novo no fim de um golpe (BUFFER, fração da animação) ou logo depois (WINDOW, s)
+ * emenda o próximo; senão volta ao primeiro. Cada etapa tem dano, empurrão (x) e avanço (m/s) próprios.
+ */
+export const COMBO = {
+  BUFFER: 0.45, WINDOW: 0.32, FINISHER_RECOVERY: 0.18,
+  DAMAGE: [1, 1, 2], KNOCKBACK: [0.7, 0.9, 1.5], LUNGE: [4, 4.5, 8], SLASH_SIZE: [2.4, 2.4, 3.2],
+} as const;
+
+/** Mira assistida: sem trava, o golpe puxa para o inimigo mais próximo dentro do cone (graus) e do alcance. */
+export const AIM_ASSIST = { CONE: 55, SWORD_RANGE: 7, MARACA_RANGE: 20 } as const;
+
 export const RAT = { SIGHT: 20, LOSE: 28, POUNCE_RANGE: 3.5, POUNCE_COOLDOWN: 1.4, DAMAGE: 12, HP: 3, POTION_DROP: 0.2 } as const;
 
 /** Maraca, arma de segunda mão trocável com a espada: atira ondas sonoras de longe (~24 m). */

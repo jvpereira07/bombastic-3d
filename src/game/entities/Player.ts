@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { facingRow } from '../../engine/math';
-import { MARACA, PHYSICS, PLAYER } from '../config';
+import { AIM_ASSIST, COMBO, MARACA, PHYSICS, PLAYER } from '../config';
 import type { Game } from '../Game';
 import { Inventory } from '../items/Inventory';
 import { ITEMS, type ItemId } from '../items/items';
@@ -35,6 +35,10 @@ export class Player extends Entity {
   private attackTimer = 0;
   private attackFired = false;
   private combo = 0;
+  /** Tempo que ainda dá para emendar o próximo golpe depois que o atual acabou. */
+  private comboWindow = 0;
+  /** Apertou ataque no fim do golpe: o próximo sai assim que este acabar. */
+  private queued = false;
   /** Arma na mão; o ataque (clique/F) usa ela. G troca quando já tem a maraca. */
   weapon: Weapon = 'sword';
   private attackDuration: number = PLAYER.ATTACK_TIME;
@@ -81,23 +85,33 @@ export class Player extends Entity {
     this.game.sfx.jump();
   }
 
+  /** Etapa do combo em andamento (0 a 2), ou -1 fora de combo; a HUD mostra. */
+  get comboStage(): number { return this.attacking || this.comboWindow > 0 ? this.combo : -1; }
+
   attack(): void {
-    if (this.attacking || this.dead || this.dashing) return;
+    if (this.dead || this.dashing) return;
+    if (this.attacking) {
+      // no fim do golpe o clique fica guardado e emenda o próximo; antes disso é ignorado (sem spam)
+      if (this.attackProgress >= COMBO.BUFFER && this.combo < 2) this.queued = true;
+      return;
+    }
+    this.startAttack(this.comboWindow > 0 ? (this.combo + 1) % 3 : 0);
+  }
+
+  private startAttack(stage: number): void {
+    this.combo = stage; this.queued = false; this.comboWindow = 0;
     this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : PLAYER.ATTACK_TIME;
+    if (stage === 2) this.attackDuration += COMBO.FINISHER_RECOVERY; // golpe final pesa mais
     this.attackTimer = this.attackDuration; this.attackFired = false;
-    this.combo = (this.combo + 1) % 3;
+    let wanted = this.dir.clone();
     if (this.weapon === 'maraca') {
       // de longe mira para onde a câmera olha
       const yaw = this.game.camera.yaw;
-      this.dir.set(-Math.sin(yaw), -Math.cos(yaw));
+      wanted = new THREE.Vector2(-Math.sin(yaw), -Math.cos(yaw));
       this.game.sfx.maraca();
     } else this.game.sfx.slash();
-    // com a mira travada, o golpe sai sempre na direção do alvo
-    const target = this.game.lockOn.target;
-    if (target) {
-      const dx = target.pos.x - this.pos.x, dz = target.pos.z - this.pos.z;
-      if (Math.hypot(dx, dz) > 0.01) this.dir.set(dx, dz).normalize();
-    }
+    const range = this.weapon === 'maraca' ? AIM_ASSIST.MARACA_RANGE : AIM_ASSIST.SWORD_RANGE;
+    this.dir.copy(this.game.lockOn.assist(this.pos, wanted, range));
   }
 
   /** Troca entre espada e maraca (a maraca vai na segunda mão; precisa tê-la). */
@@ -157,7 +171,7 @@ export class Player extends Entity {
 
   // ---------- simulação ----------
   update(dt: number): void {
-    this.hurtTimer -= dt; this.dashTimer -= dt; this.dashCooldown -= dt;
+    this.hurtTimer -= dt; this.dashTimer -= dt; this.dashCooldown -= dt; this.comboWindow -= dt;
     this.stamina = Math.min(PLAYER.MAX_STAMINA, this.stamina + PLAYER.STAMINA_REGEN * dt);
     if (this.dead) { this.updateDeath(dt); this.render(false); return; }
 
@@ -170,17 +184,31 @@ export class Player extends Entity {
     this.fall(dt);
     this.walkAnim = moving && this.grounded ? this.walkAnim + dt * 12 : 0;
 
-    if (this.attacking) {
-      this.attackTimer -= dt;
-      if (!this.attackFired && this.attackProgress >= 1 / 6) {
-        this.attackFired = true;
-        const dir = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
-        if (this.weapon === 'maraca') this.game.spawn(new MaracaShot(this.game, this.pos, dir, this.row, this.combo));
-        else this.game.spawn(new SlashProjectile(this.game, this.pos, dir, this.row));
-      }
-    }
+    if (this.attacking) this.updateAttack(dt);
     if (this.dashing) this.dashThrough();
     this.render(moving);
+  }
+
+  private updateAttack(dt: number): void {
+    this.attackTimer -= dt;
+    const stage = this.combo, progress = this.attackProgress;
+    // avanço no começo do golpe da espada (o final avança mais)
+    if (this.weapon === 'sword' && progress < 0.5) {
+      const lunge = COMBO.LUNGE[stage]! * (1 - progress * 2) * dt;
+      this.pos.x += this.dir.x * lunge; this.pos.z += this.dir.y * lunge;
+    }
+    if (!this.attackFired && progress >= 1 / 6) {
+      this.attackFired = true;
+      const dir = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
+      const damage = COMBO.DAMAGE[stage]!, power = COMBO.KNOCKBACK[stage]!;
+      if (this.weapon === 'maraca') this.game.spawn(new MaracaShot(this.game, this.pos, dir, this.row, stage, damage, power));
+      else this.game.spawn(new SlashProjectile(this.game, this.pos, dir, this.row, damage, power, COMBO.SLASH_SIZE[stage]));
+      if (stage === 2) this.game.sfx.hit();
+    }
+    if (this.attackTimer > 0) return;
+    this.attackTimer = 0;
+    if (this.queued) this.startAttack(stage + 1);
+    else this.comboWindow = stage < 2 ? COMBO.WINDOW : 0;
   }
 
   private get attackProgress(): number { return 1 - this.attackTimer / this.attackDuration; }

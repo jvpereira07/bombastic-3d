@@ -16,5 +16,6 @@ export interface Hittable {
   readonly pos: THREE.Vector3;
   readonly hitRadius: number;
   readonly canBeHit: boolean;
-  takeHit(direction: THREE.Vector3): void;
+  /** `damage` padrão 1; o golpe final do combo dá mais. */
+  takeHit(direction: THREE.Vector3, damage?: number): void;
 }

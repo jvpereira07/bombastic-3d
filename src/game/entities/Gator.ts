@@ -34,9 +34,9 @@ export class Gator extends Actor {
   get canBeHit(): boolean { return super.canBeHit && this.dying <= 0; }
 
   /** Não sai do lugar com o golpe; só sente o dano. */
-  takeHit(direction: THREE.Vector3): void {
+  takeHit(direction: THREE.Vector3, damage = 1): void {
     if (this.forwardHit(direction)) return;
-    this.hp--; this.hurtTimer = 0.15;
+    this.hp -= damage; this.hurtTimer = 0.15;
     this.game.sfx.hit();
     if (this.hp <= 0) this.dying = 0.5;
   }

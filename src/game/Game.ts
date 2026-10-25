@@ -211,6 +211,7 @@ export class Game {
       potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'), hasMaraca: this.player.inventory.has('maraca'), weapon: this.player.weapon,
       boss: { visible: this.boss.fighting, hp: this.boss.hp, maxHp: BOSS.HP },
       showManholePrompt: !this.player.dead && this.world.manholeNear(p) !== undefined,
+      comboStage: this.player.comboStage,
     });
   }
 

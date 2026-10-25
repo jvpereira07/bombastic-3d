@@ -35,12 +35,12 @@ export class SlashProjectile extends Entity {
     return (SlashProjectile.full = tex);
   }
 
-  constructor(game: Game, from: THREE.Vector3, private readonly dir: THREE.Vector3, row: number) {
+  constructor(game: Game, from: THREE.Vector3, private readonly dir: THREE.Vector3, row: number, private readonly damage = 1, private readonly power = 1, size = 2.4) {
     super(game);
     this.pos = from.clone().addScaledVector(dir, 0.6);
     this.sheet = new SpriteSheet(SlashProjectile.fullTexture(game.assets).clone(), 1, 4);
     this.sheet.setFrame(row, 0);
-    this.sprite = new Billboard(game.scene, this.sheet.texture, 2.4, 2.4, 0.5);
+    this.sprite = new Billboard(game.scene, this.sheet.texture, size, size, 0.5);
   }
 
   update(dt: number): void {
@@ -51,7 +51,7 @@ export class SlashProjectile extends Entity {
       if (this.hit.has(target) || !target.canBeHit) continue;
       if (flatDistance(target.pos, this.pos) < target.hitRadius && Math.abs(target.pos.y - this.pos.y) < 1.6) {
         this.hit.add(target);
-        target.takeHit(this.dir.clone().multiplyScalar(PLAYER.SLASH_KNOCKBACK));
+        target.takeHit(this.dir.clone().multiplyScalar(PLAYER.SLASH_KNOCKBACK * this.power), this.damage);
       }
     }
     if (this.life <= 0) this.alive = false;

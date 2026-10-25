@@ -46,7 +46,7 @@ export abstract class Actor extends Entity implements Hittable {
   get position(): THREE.Vector3 { return this.pos; }
 
   get canBeHit(): boolean { return this.alive && this.hp > 0; }
-  abstract takeHit(direction: THREE.Vector3): void;
+  abstract takeHit(direction: THREE.Vector3, damage?: number): void;
 
   get onGround(): boolean { return this.pos.y <= this.game.world.groundAt(this.pos.x, this.pos.z) + 0.01; }
 
