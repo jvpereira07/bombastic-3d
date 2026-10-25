@@ -36,7 +36,7 @@ export const CUCARACHA = {
   HP: 2, DAMAGE: 8, SPEED: 9, SIGHT: 16, LOSE: 26, TROUPE: [4, 6] as [number, number],
   ORBIT_START: 6, ORBIT_MIN: 2.8, ORBIT_SHRINK: 0.35, SPIN: 1.2,
   LUNGE_SPEED: 15, LUNGE_TIME: 0.4, LUNGE_COOLDOWN: [2.5, 5] as [number, number],
-  HOP: 4, HOP_EVERY: 60 / 176 * 2,
+  HOP: 4, HOP_EVERY: 60 / 174 * 2, // pulinho a cada meio compasso da música
 } as const;
 
 export const RAT = { SIGHT: 20, LOSE: 28, POUNCE_RANGE: 3.5, POUNCE_COOLDOWN: 1.4, DAMAGE: 12, HP: 3, POTION_DROP: 0.2 } as const;
