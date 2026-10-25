@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 /**
  * Pós-processamento do cel shading: renderiza a cena num alvo com profundidade e
- * desenha contornos onde a profundidade salta (silhuetas, barrancos, sprites).
- * O contorno some com a distância para não virar ruído na neblina.
+ * desenha contornos onde a profundidade quebra (silhuetas, barrancos, sprites).
+ * Longe, o contorno engrossa e as cores são posterizadas em poucos tons chapados.
  */
 export class CelOutline {
   private readonly target: THREE.WebGLRenderTarget;
@@ -36,13 +36,16 @@ export class CelOutline {
         void main() {
           vec4 color = texture2D(tColor, vUv);
           float d = depthAt(vUv);
-          float jump = 0.0;
-          jump = max(jump, abs(depthAt(vUv + vec2(texel.x, 0.0)) - d));
-          jump = max(jump, abs(depthAt(vUv - vec2(texel.x, 0.0)) - d));
-          jump = max(jump, abs(depthAt(vUv + vec2(0.0, texel.y)) - d));
-          jump = max(jump, abs(depthAt(vUv - vec2(0.0, texel.y)) - d));
-          float edge = smoothstep(0.06, 0.12, jump / d) * (1.0 - smoothstep(70.0, 170.0, d));
-          gl_FragColor = vec4(mix(color.rgb, ink, edge * 0.85), 1.0);
+          float far = smoothstep(40.0, 160.0, d);
+          vec2 o = texel * (1.0 + far);                     // contorno de 2 px ao longe
+          // segunda derivada: plano inclinado dá ~0 mesmo rasante; quina e silhueta não
+          float bendX = abs(depthAt(vUv + vec2(o.x, 0.0)) + depthAt(vUv - vec2(o.x, 0.0)) - 2.0 * d);
+          float bendY = abs(depthAt(vUv + vec2(0.0, o.y)) + depthAt(vUv - vec2(0.0, o.y)) - 2.0 * d);
+          float edge = smoothstep(0.02, 0.05, max(bendX, bendY) / d) * (1.0 - smoothstep(240.0, 330.0, d));
+          vec3 srgb = pow(max(color.rgb, 0.0), vec3(1.0 / 2.2));
+          vec3 poster = pow(floor(srgb * 6.0 + 0.5) / 6.0, vec3(2.2)); // tons chapados
+          vec3 base = mix(color.rgb, poster, far);
+          gl_FragColor = vec4(mix(base, ink, edge * mix(0.75, 0.95, far)), 1.0);
           #include <colorspace_fragment>
         }`,
       depthTest: false,

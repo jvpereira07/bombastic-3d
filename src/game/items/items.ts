@@ -1,7 +1,7 @@
 import type { Player } from '../entities/Player';
 
-export type ItemId = 'potion' | 'sombrero';
-export type Ability = 'dash';
+export type ItemId = 'potion' | 'sombrero' | 'maraca';
+export type Ability = 'dash' | 'maraca';
 
 interface BaseItem { id: ItemId; name: string; icon: string; maxStack: number }
 
@@ -20,5 +20,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   sombrero: {
     id: 'sombrero', name: 'Chapéu do Ligeirinho', icon: 'sombrero', maxStack: 1, kind: 'equipment',
     grants: ['dash'], layer: 'hat',
+  },
+  maraca: {
+    id: 'maraca', name: 'Maraca', icon: 'maraca', maxStack: 1, kind: 'equipment', grants: ['maraca'],
   },
 };

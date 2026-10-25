@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BOSS, ROW } from '../config';
+import { ROW } from '../config';
 import { Paratrooper } from '../boss/Paratrooper';
 import { BombRat } from '../entities/BombRat';
 import { Gator } from '../entities/Gator';
@@ -23,6 +23,7 @@ export class CreativeMenu {
       { label: 'Paraquedista', icon: 'para', frame: [4, 2, 0, 0], run: (p) => game.spawn(new Paratrooper(game, p.x, p.z)) },
       { label: 'Jacaré (no rio)', icon: 'gator', frame: [20, 6, 0, 2], run: (p) => game.spawn(new Gator(game, TestArena.RIVER_X, p.z)) },
       { label: 'Poção', icon: 'potion', run: (p) => game.dropItem('potion', p.x, p.z) },
+      { label: 'Maraca', icon: 'maraca', run: (p) => game.dropItem('maraca', p.x, p.z) },
       { label: 'Chapéu', icon: 'sombrero', run: (p) => game.dropItem('sombrero', p.x, p.z) },
       { label: 'Explosão', icon: 'boom', frame: [9, 1, 2, 0], run: (p) => game.explode(p.clone().setY(game.world.groundAt(p.x, p.z))) },
     ];
@@ -30,7 +31,8 @@ export class CreativeMenu {
       { label: 'Curar', run: () => game.player.heal(Infinity) },
       { label: 'Limpar inimigos', run: () => game.clearEnemies() },
       { label: 'Ir ao início', run: () => this.teleport(new THREE.Vector3(0, 0, 0)) },
-      { label: 'Ir à arena do chefe', run: () => this.teleport(BOSS.CENTER.clone().setZ(BOSS.CENTER.z - 14)) },
+      { label: 'Ir ao esgoto (novo)', run: () => game.enterSewer() },
+      { label: 'Ir à arena do chefe', run: () => { const c = game.world.sewer.arena.center; this.teleport(c.clone().setZ(game.world.sewer.arena.minZ + 2)); } },
     ];
 
     this.root.id = 'creative';

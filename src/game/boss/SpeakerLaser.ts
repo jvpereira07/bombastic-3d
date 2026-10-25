@@ -6,13 +6,16 @@ export type LaserPhase = 'idle' | 'charge' | 'fire';
 
 /**
  * Laser 3D da caixa de som: na carga o chefe puxa a caixa e uma linha vermelha mira;
- * no disparo, um feixe verde gira devagar até o jogador.
+ * no disparo, um feixe verde persegue onde o jogador estava há um instante (atraso de TRAIL_DELAY),
+ * então quem continua se mexendo escapa e quem para é alcançado.
  */
 export class SpeakerLaser {
   static readonly CHARGE = 0.75;
   static readonly FIRE = 2.6;
   private static readonly DAMAGE = 14;
   private static readonly MAX_LENGTH = 50;
+  private static readonly TRAIL_DELAY = 0.55;  // s de atraso entre o jogador e o ponto que o feixe persegue
+  private static readonly TURN_RATE = 4;        // rad/s; rápido o bastante para colar no rastro atrasado
 
   phase: LaserPhase = 'idle';
   timer = 0;
@@ -23,6 +26,9 @@ export class SpeakerLaser {
   private readonly impactLight = new THREE.PointLight(0x5cff8a, 0, 18, 0);
   private readonly speakerGlow = new THREE.PointLight(0x5cff8a, 0, 10, 0);
   private stopHum: (() => void) | null = null;
+  /** Rastro do jogador (tempo, posição) para mirar no passado. */
+  private readonly trail: { t: number; p: THREE.Vector3 }[] = [];
+  private clock = 0;
 
   constructor(private readonly game: Game, private readonly origin: () => THREE.Vector3) {
     const geo = new THREE.CylinderGeometry(1, 1, 1, 14, 1, true);
@@ -50,6 +56,7 @@ export class SpeakerLaser {
 
   stop(): void {
     this.phase = 'idle';
+    this.trail.length = 0;
     this.outer.visible = this.core.visible = this.aim.visible = false;
     this.impactLight.intensity = this.speakerGlow.intensity = 0;
     this.stopHum?.(); this.stopHum = null;
@@ -58,7 +65,10 @@ export class SpeakerLaser {
   /** Devolve true quando o disparo termina. `enraged` vira mais rápido. */
   update(dt: number, enraged: boolean): boolean {
     const from = this.origin(), target = this.game.player.pos.clone().add(new THREE.Vector3(0, 1, 0));
-    this.timer -= dt;
+    this.timer -= dt; this.clock += dt;
+    this.trail.push({ t: this.clock, p: target.clone() });
+    while (this.trail.length > 1 && this.trail[1]!.t <= this.clock - SpeakerLaser.TRAIL_DELAY) this.trail.shift();
+    const delayed = this.trail[0]!.p;
     this.speakerGlow.position.copy(from);
     if (this.phase === 'charge') {
       this.dir.copy(target).sub(from).normalize();
@@ -76,10 +86,10 @@ export class SpeakerLaser {
     }
     if (this.phase !== 'fire') return false;
 
-    const want = target.clone().sub(from).normalize(), angle = this.dir.angleTo(want);
+    const want = delayed.clone().sub(from).normalize(), angle = this.dir.angleTo(want);
     if (angle > 1e-4) {
       const axis = new THREE.Vector3().crossVectors(this.dir, want).normalize();
-      this.dir.applyAxisAngle(axis, Math.min(angle, (enraged ? 1.4 : 0.9) * dt));
+      this.dir.applyAxisAngle(axis, Math.min(angle, SpeakerLaser.TURN_RATE * (enraged ? 1.4 : 1) * dt));
     }
     const pulse = 1 + Math.sin(performance.now() / 40) * 0.15;
     const length = this.place(this.outer, from, 0.45 * pulse);

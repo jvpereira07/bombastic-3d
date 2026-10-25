@@ -91,3 +91,57 @@ export const ProceduralSprites = {
     return tex;
   },
 };
+
+/** Grade vazia w x h para desenhar à mão. */
+const blank = (w: number, h: number): Grid => Array.from({ length: h }, () => Array<string | null>(w).fill(null));
+
+/** Cacto saguaro: tronco com dois braços, listras verticais. */
+function cactusGrid(): Grid {
+  const g = blank(16, 26);
+  const fill = (x0: number, y0: number, x1: number, y1: number): void => {
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g[y]![x] = x === x0 ? 'L' : x === x1 ? 'D' : (x - x0) % 2 ? 'M' : 'L';
+  };
+  fill(6, 1, 9, 25);
+  fill(1, 8, 4, 16); fill(1, 15, 6, 17);
+  fill(11, 5, 14, 13); fill(9, 12, 14, 14);
+  return outline(g);
+}
+
+/** Pinheiro com neve: camadas triangulares, neve no topo de cada uma. */
+function pineGrid(): Grid {
+  const g = blank(24, 36);
+  for (const [top, half, h] of [[1, 5, 9], [7, 8, 10], [14, 11, 11]] as const) {
+    for (let y = 0; y < h; y++) {
+      const w = Math.round(1 + (half * y) / (h - 1));
+      for (let x = 12 - w; x <= 12 + w; x++) g[top + y]![x] = y < 2 + (x % 3 === 0 ? 1 : 0) ? 'S' : x < 12 ? 'M' : 'D';
+    }
+  }
+  for (let y = 25; y < 36; y++) for (let x = 11; x <= 13; x++) g[y]![x] = x === 11 ? 't' : 'T';
+  return outline(g);
+}
+
+/** Coqueiro: tronco curvo e folhas em leque. */
+function palmGrid(): Grid {
+  const g = blank(30, 40);
+  for (let y = 12; y < 40; y++) { const x = 14 + Math.round(Math.sin((y - 12) / 9) * 2); g[y]![x] = (y % 3) ? 't' : 'T'; g[y]![x + 1] = 'T'; }
+  for (const [dx, dy] of [[-1, 0.15], [1, 0.15], [-1, 0.6], [1, 0.6], [-0.5, -0.4], [0.5, -0.4]] as const) {
+    for (let i = 0; i < 12; i++) {
+      const x = Math.round(15 + dx * i), y = Math.round(11 + dy * i + (i * i) / 30);
+      for (const o of [0, 1]) if (g[y + o]?.[x] !== undefined) g[y + o]![x] = o ? 'D' : 'L';
+    }
+  }
+  g[12]![14] = 'c'; g[13]![16] = 'c';
+  return outline(g);
+}
+
+/** Pedra arredondada (serve para deserto, praia e gelo trocando a paleta). */
+const rockGrid = (): Grid => blobGrid(14, 10, [[5, 6, 4], [9, 6, 4], [7, 4, 3]]);
+
+export const BiomeSprites = {
+  cactus: () => gridTexture(cactusGrid(), { L: '#8fd46a', M: '#5fae48', D: '#3e7f34', o: '#1f3a1a' }),
+  pine: () => gridTexture(pineGrid(), { S: '#f4fbff', M: '#3f8a5c', D: '#2a6644', t: '#8a5a34', T: '#5e3b22', o: '#16302a' }),
+  palm: () => gridTexture(palmGrid(), { L: '#7ed65a', D: '#3e9a3c', c: '#7a4a24', t: '#c9975c', T: '#9a6c3c', o: '#22301a' }),
+  sandRock: () => gridTexture(rockGrid(), { L: '#e9c98f', M: '#c9a26a', D: '#9c7a4a', K: '#6e5434', o: '#3a2a1a' }),
+  iceRock: () => gridTexture(rockGrid(), { L: '#ffffff', M: '#cfe9fb', D: '#93c2e6', K: '#5f93c2', o: '#2a4a6a' }),
+  deadBush: () => gridTexture(blobGrid(16, 10, [[5, 6, 4], [11, 6, 4]]), { L: '#c8a874', M: '#a5844e', D: '#7d6036', K: '#5a4224', o: '#3a2a16' }),
+};

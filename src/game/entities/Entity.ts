@@ -6,6 +6,8 @@ export abstract class Entity {
   alive = true;
   constructor(protected readonly game: Game) {}
   abstract update(dt: number): void;
+  /** Onde está, para saber em que shard simula; null = sempre simula (projéteis, efeitos curtos). */
+  get position(): THREE.Vector3 | null { return null; }
   dispose(): void { /* subclasses liberam sprites e texturas */ }
 }
 

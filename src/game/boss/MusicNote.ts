@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
-import { SEWER } from '../config';
 import type { Game } from '../Game';
 import { Entity } from '../entities/Entity';
 
@@ -34,8 +33,8 @@ export class MusicNote extends Entity {
       player.hurt(MusicNote.DAMAGE, this.dir);
       this.alive = false;
     }
-    const { SX, SW, SL, AL } = SEWER;
-    if (this.age >= MusicNote.LIFE || Math.abs(this.base.x - SX) > SW || this.base.z > SL + AL || this.base.z < SL - 6) this.alive = false;
+    const a = this.game.world.sewer.arena;
+    if (this.age >= MusicNote.LIFE || this.base.x < a.minX || this.base.x > a.maxX || this.base.z < a.minZ - 6 || this.base.z > a.maxZ) this.alive = false;
   }
 
   dispose(): void { this.sprite.dispose(); this.sheet.dispose(); }

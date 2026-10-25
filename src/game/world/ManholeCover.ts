@@ -6,10 +6,12 @@ import { flatDistance } from '../../engine/math';
 export class ManholeCover {
   private static readonly REACH = 1.4;
 
+  private readonly mesh: THREE.Mesh;
+
   constructor(scene: THREE.Scene, map: THREE.Texture, readonly at: THREE.Vector3, readonly to: THREE.Vector3,
-    groundAt: (x: number, z: number) => number) {
+    private readonly groundAt: (x: number, z: number) => number) {
     at.y = groundAt(at.x, at.z) + 0.04;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6),
+    const mesh = this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6),
       toonMaterial({ map, polygonOffset: true, polygonOffsetFactor: -2 }));
     // inclina junto com o terreno
     const n = new THREE.Vector3(groundAt(at.x - 0.5, at.z) - groundAt(at.x + 0.5, at.z), 1,
@@ -18,6 +20,12 @@ export class ManholeCover {
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
     mesh.position.copy(at);
     scene.add(mesh);
+  }
+
+  /** Muda a tampa de lugar (a masmorra do esgoto troca a cada entrada). */
+  relocate(at: THREE.Vector3): void {
+    this.at.set(at.x, this.groundAt(at.x, at.z) + 0.04, at.z);
+    this.mesh.position.copy(this.at);
   }
 
   isNear(p: THREE.Vector3): boolean { return flatDistance(p, this.at) < ManholeCover.REACH; }

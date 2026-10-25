@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { flatDistance } from '../../engine/math';
-import { BOSS, SEWER } from '../config';
+import { BOSS } from '../config';
 import type { Game } from '../Game';
 import { Actor } from '../entities/Actor';
 import { BombRat } from '../entities/BombRat';
@@ -33,11 +33,15 @@ export class MrKabumstic extends Actor {
 
   constructor(game: Game) {
     const sheet = new SpriteSheet(game.assets.texture('boss'), 19, 9);
-    super(game, BOSS.CENTER.x, BOSS.CENTER.z, BOSS.HP, [sheet], 1, 0.03);
+    const center = game.world.sewer.arena.center;
+    super(game, center.x, center.z, BOSS.HP, [sheet], 1, 0.03);
     this.body.sprite.scale.set(9.1, 10.4, 1);
     this.sheet = sheet;
     this.laser = new SpeakerLaser(game, () => SpeakerLaser.speakerPosition(this.pos, game.camera.yaw));
   }
+
+  /** Centro da arena da masmorra atual (muda a cada esgoto gerado). */
+  private get center(): THREE.Vector3 { return this.game.world.sewer.arena.center; }
 
   get fighting(): boolean { return this.state === 'fight'; }
   get canBeHit(): boolean { return this.fighting; }
@@ -58,7 +62,7 @@ export class MrKabumstic extends Actor {
   reset(): void {
     this.laser.stop();
     Object.assign(this, { hp: BOSS.HP, state: 'idle', musicTimer: 2, ringCooldown: 0, ringPulses: 0, laserCooldown: 4, planeTimer: 3, bombTimer: 6, attackPose: 0 });
-    this.pos.copy(BOSS.CENTER);
+    this.pos.copy(this.center);
     this.body.visible = true;
   }
 
@@ -95,7 +99,7 @@ export class MrKabumstic extends Actor {
     const prev = this.angle;
     this.angle += 1.1 * this.spin * dt;
     if (Math.floor(prev / (Math.PI * 2)) !== Math.floor(this.angle / (Math.PI * 2)) && ++this.turns >= 2) { this.spin *= -1; this.turns = 0; }
-    const target = new THREE.Vector3(BOSS.CENTER.x + Math.cos(this.angle) * BOSS.RADIUS, 0, BOSS.CENTER.z + Math.sin(this.angle) * BOSS.RADIUS);
+    const target = new THREE.Vector3(this.center.x + Math.cos(this.angle) * BOSS.RADIUS, 0, this.center.z + Math.sin(this.angle) * BOSS.RADIUS);
     const step = target.sub(this.pos); step.y = 0;
     this.vel.copy(step.lengthSq() > 0.01 ? step.normalize().multiplyScalar(BOSS.SPEED) : step.set(0, 0, 0));
     this.pos.addScaledVector(this.vel, dt);
@@ -132,7 +136,8 @@ export class MrKabumstic extends Actor {
     if ((this.planeTimer -= dt) <= 0) { this.planeTimer = 10; if (room) this.game.spawn(new RatPlane(this.game)); }
     if ((this.bombTimer -= dt) <= 0) {
       this.bombTimer = 7;
-      if (room) for (const side of [-1, 1]) this.game.spawn(new BombRat(this.game, SEWER.SX + side * (SEWER.SW - 2), SEWER.SL + SEWER.AL - 3));
+      const a = this.game.world.sewer.arena;
+      if (room) for (const x of [a.minX + 2, a.maxX - 2]) this.game.spawn(new BombRat(this.game, x, a.maxZ - 3));
     }
   }
 

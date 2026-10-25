@@ -7,13 +7,15 @@ import { ManholeCover } from './ManholeCover';
 import { Overworld } from './Overworld';
 import { Sewer } from './Sewer';
 import { TestArena } from './TestArena';
+import { ShardManager } from './ShardManager';
+import { SHARD, type ShardId } from './shards';
 
 export type Zone = 'overworld' | 'sewer';
 export type WorldMode = 'normal' | 'test';
 
 type Atmosphere = { sky: number; fog: number; near: number; far: number };
 const ATMOSPHERE: Record<Zone, Atmosphere> = {
-  overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 80, far: 230 },
+  overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 90, far: 215 }, // termina antes da borda dos shards visíveis
   sewer: { sky: 0x0d1410, fog: 0x0d1410, near: 8, far: 45 },
 };
 const TEST_ATMOSPHERE: Atmosphere = { sky: 0xffffff, fog: 0xffffff, near: 60, far: 160 };
@@ -22,7 +24,8 @@ const TEST_ATMOSPHERE: Atmosphere = { sky: 0xffffff, fog: 0xffffff, near: 60, fa
 export class World implements CameraWorld {
   readonly sewer: Sewer;
   readonly manholes: ManholeCover[];
-  private readonly fog = new THREE.Fog(0xbfe6ff, 80, 230);
+  readonly shards: ShardManager;
+  private readonly fog = new THREE.Fog(0xbfe6ff, 90, 215);
   private readonly sky = new THREE.Color(0x8fd3ff);
 
   constructor(private readonly scene: THREE.Scene, assets: Assets, anisotropy: number, readonly mode: WorldMode = 'normal') {
@@ -35,14 +38,19 @@ export class World implements CameraWorld {
     scene.add(sun);
 
     const surfaceLid = new THREE.Vector3(5, 0, 8);
-    const sewerLid = new THREE.Vector3(SEWER.SX + SEWER.CH + 3, 0, -SEWER.SL + 3);
+    const groups = new Map<ShardId, THREE.Object3D>();
     if (mode === 'test') new TestArena(scene);
-    else new Overworld(scene, assets, anisotropy, [surfaceLid]);
-    this.sewer = new Sewer(scene, assets, anisotropy);
+    else for (const [id, group] of new Overworld(scene, assets, anisotropy, [surfaceLid]).shards) groups.set(id, group);
+    const sewerGroup = new THREE.Group();
+    sewerGroup.name = `shard ${SHARD.SEWER}`;
+    scene.add(sewerGroup);
+    groups.set(SHARD.SEWER, sewerGroup);
+    this.sewer = new Sewer(sewerGroup, assets, anisotropy, Sewer.newSeed());
+    this.shards = new ShardManager(groups);
     const grate = assets.pixel('grate');
     this.manholes = [
-      new ManholeCover(scene, grate, surfaceLid, new THREE.Vector3(sewerLid.x, 0, sewerLid.z), this.groundAt),
-      new ManholeCover(scene, grate, sewerLid, new THREE.Vector3(5, 0, 10), this.groundAt),
+      new ManholeCover(scene, grate, surfaceLid, this.sewer.entry, this.groundAt),          // `to` acompanha cada masmorra nova
+      new ManholeCover(scene, grate, this.sewer.exitLid.clone(), new THREE.Vector3(5, 0, 10), this.groundAt),
     ];
   }
 
@@ -51,23 +59,27 @@ export class World implements CameraWorld {
 
   private surfaceHeight(x: number, z: number): number { return this.mode === 'test' ? TestArena.height() : Overworld.height(x, z); }
 
-  readonly groundAt = (x: number, z: number): number => (Sewer.contains(x) ? Sewer.height(x, z) : this.surfaceHeight(x, z));
+  readonly groundAt = (x: number, z: number): number => (Sewer.contains(x) ? this.sewer.height(x, z) : this.surfaceHeight(x, z));
 
   /** Chão sob alguém; pontes só seguram quem já está na altura delas. */
   groundUnder(p: THREE.Vector3): number {
-    return Sewer.contains(p.x) ? Sewer.height(p.x, p.z, p.y >= -0.05) : this.surfaceHeight(p.x, p.z);
+    return Sewer.contains(p.x) ? this.sewer.height(p.x, p.z, p.y >= -0.05) : this.surfaceHeight(p.x, p.z);
   }
 
   clampToZone(p: THREE.Vector3): void {
-    if (Sewer.contains(p.x)) { Sewer.clamp(p); return; }
+    if (Sewer.contains(p.x)) { this.sewer.clamp(p); return; }
     p.x = clamp(p.x, -OVERWORLD.HALF, OVERWORLD.HALF);
     p.z = clamp(p.z, -OVERWORLD.HALF, OVERWORLD.HALF);
   }
 
-  isWading(p: THREE.Vector3): boolean { return Sewer.contains(p.x) && p.y < SEWER.WATER_Y + 0.05; }
+  /** Na água rasa (canal do esgoto ou mar da praia) anda devagar. */
+  isWading(p: THREE.Vector3): boolean {
+    if (Sewer.contains(p.x)) return p.y < SEWER.WATER_Y + 0.05;
+    return this.mode === 'normal' && p.y < OVERWORLD.SEA_Y + 0.05;
+  }
 
   constrainCamera(cameraPos: THREE.Vector3, lookAt: THREE.Vector3): void {
-    if (Sewer.contains(lookAt.x)) Sewer.clampCamera(cameraPos);
+    if (Sewer.contains(lookAt.x)) this.sewer.clampCamera(cameraPos, lookAt);
   }
 
   manholeNear(p: THREE.Vector3): ManholeCover | undefined { return this.manholes.find((m) => m.isNear(p)); }
@@ -78,5 +90,11 @@ export class World implements CameraWorld {
     this.scene.background = this.sky;
   }
 
-  update(dt: number): void { this.sewer.update(dt); }
+  /** Gera um esgoto novo e leva a tampa de saída para a sala de entrada dele. */
+  regenerateSewer(seed: number): void {
+    this.sewer.regenerate(seed);
+    this.manholes[1]!.relocate(this.sewer.exitLid);
+  }
+
+  update(dt: number, focus: THREE.Vector3): void { this.sewer.update(dt, focus); }
 }

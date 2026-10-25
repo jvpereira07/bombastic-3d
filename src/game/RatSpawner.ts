@@ -1,7 +1,6 @@
 import { rnd } from '../engine/math';
 import type { Game } from './Game';
 import { Rat } from './entities/Rat';
-import { Sewer } from './world/Sewer';
 import type { Zone } from './world/World';
 
 /** Popula e repõe os ratos comuns. No esgoto, nada renasce enquanto o chefe luta. */
@@ -20,7 +19,7 @@ export class RatSpawner {
 
   spawn(zone: Zone): void {
     if (zone === 'sewer') {
-      const p = Sewer.randomWalkway();
+      const p = this.game.world.sewer.randomFloor();
       this.game.spawn(new Rat(this.game, p.x, p.z));
       return;
     }

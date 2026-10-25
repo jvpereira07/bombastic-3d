@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { toonMaterial } from '../../engine/toon';
 import type { Assets } from '../../engine/Assets';
-import { pick, rnd, smoothstep } from '../../engine/math';
+import { smoothstep } from '../../engine/math';
+import { hashSeed, rngPick, rngRange, seededRng, type Rng } from '../../engine/rng';
+import { toonMaterial } from '../../engine/toon';
 import { OVERWORLD } from '../config';
-import { ProceduralSprites } from './pixelArt';
+import { BiomeSprites, ProceduralSprites } from './pixelArt';
+import { SHARD, allShards, shardId, shardOrigin, type ShardCoord, type ShardId } from './shards';
 
 const hash = (x: number, z: number): number => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
 function valueNoise(x: number, z: number): number {
@@ -16,80 +18,199 @@ function fbm(x: number, z: number): number {
   for (let o = 0; o < 5; o++) { v += valueNoise(x * f, z * f) * amp; total += amp; amp *= 0.5; f *= 2.03; }
   return v / total;
 }
+const clamp01 = (t: number): number => Math.min(1, Math.max(0, t));
 
-/** Superfície: colinas em terraços (barrancos), grama e cenário em pixel art. */
+export type Biome = 'grass' | 'desert' | 'ice' | 'beach';
+
+interface SceneryTextures {
+  tree: THREE.Texture[]; pink: THREE.Texture[]; bush: THREE.Texture[]; props: THREE.Texture[]; flower: THREE.Texture[];
+  cactus: THREE.Texture[]; pine: THREE.Texture[]; palm: THREE.Texture[];
+  sandRock: THREE.Texture[]; iceRock: THREE.Texture[]; deadBush: THREE.Texture[];
+  tuft: THREE.SpriteMaterial;
+}
+
+/** Peso de cada bioma num ponto: grama no centro; deserto a leste, gelo ao norte, praia ao sul. */
+interface BiomeWeights { desert: number; ice: number; beach: number }
+
+/** Superfície: colinas em terraços no centro e três biomas em volta, com mar ao sul. Gerada shard a shard (ver shards.ts). */
 export class Overworld {
   private static readonly TERRACE = 2.6;
+  private static readonly WALL = OVERWORLD.HALF - 10;
+  private static readonly SEGMENTS = 45;          // por shard: 8 x 45 = 360 na superfície toda
+  private static readonly DETAIL_TILE = 5.5;      // metros por repetição da textura de detalhe
+  private static readonly PROPS_PER_SHARD = 22;
+  private static readonly TUFTS_PER_SHARD = 45;
 
-  static height(x: number, z: number): number {
+  static weights(x: number, z: number): BiomeWeights {
+    const r = Math.hypot(x, z);
+    const out = smoothstep(clamp01((r - 75 + (fbm(x * 0.03, z * 0.03) - 0.5) * 30) / 35)); // sai da grama entre ~75 e ~110 m
+    if (out <= 0) return { desert: 0, ice: 0, beach: 0 };
+    const nx = x / r, nz = z / r, sector = (d: number): number => smoothstep(clamp01((d - 0.3) / 0.5));
+    const desert = sector(nx), ice = sector(-nz), beach = sector(nz), sum = Math.max(1, desert + ice + beach); // nas diagonais divide
+    return { desert: (out * desert) / sum, ice: (out * ice) / sum, beach: (out * beach) / sum };
+  }
+
+  static biome(x: number, z: number): Biome {
+    const w = Overworld.weights(x, z), best = Math.max(w.desert, w.ice, w.beach);
+    if (best < 0.5) return 'grass';
+    return best === w.desert ? 'desert' : best === w.ice ? 'ice' : 'beach';
+  }
+
+  private static hills(x: number, z: number): number {
     let h = (fbm(x * 0.018 + 11, z * 0.018 + 7) - 0.45) * 22; // colinas irregulares
     h += (fbm(x * 0.07, z * 0.07) - 0.5) * 2;                 // calombos
     const f = h / Overworld.TERRACE, i = Math.floor(f), fr = f - i;
-    h = (i + smoothstep(Math.min(1, Math.max(0, (fr - 0.72) / 0.28)))) * Overworld.TERRACE + fr * 0.6; // platô + degrau
-    const r = Math.hypot(x, z);
-    if (r < 8) h *= r / 8;                                    // início plano
-    return h + Math.max(0, (r - 85) * 0.6);                   // paredão nas bordas
+    return (i + smoothstep(clamp01((fr - 0.72) / 0.28))) * Overworld.TERRACE + fr * 0.6; // platô + degrau
+  }
+
+  static height(x: number, z: number): number {
+    const w = Overworld.weights(x, z), r = Math.hypot(x, z);
+    const grass = Overworld.hills(x, z);
+    const dunes = (Math.sin(x * 0.07 + Math.sin(z * 0.045) * 2.4) * 0.5 + 0.5) * 6 + fbm(x * 0.02, z * 0.02) * 4;
+    const glacier = Overworld.hills(x * 0.8 + 40, z * 0.8) * 1.4 + 3;
+    const shore = Math.max(-2.2, 1.2 - Math.max(0, z - 115) * 0.05 + (fbm(x * 0.05, z * 0.05) - 0.5) * 1.2);
+    let h = grass * (1 - w.desert - w.ice - w.beach) + dunes * w.desert + glacier * w.ice + shore * w.beach;
+    if (r < 8) h *= r / 8;                                      // início plano
+    const wall = Math.max(0, (Math.max(Math.abs(x), Math.abs(z)) - Overworld.WALL) * 0.8);
+    return h + (w.beach > 0.5 ? 0 : wall);                      // paredão nas bordas, menos no mar
   }
 
   static contains(x: number): boolean { return Math.abs(x) <= OVERWORLD.SIZE; }
 
-  constructor(scene: THREE.Scene, assets: Assets, anisotropy: number, keepClear: THREE.Vector3[]) {
-    scene.add(this.buildTerrain(anisotropy));
-    this.scatterScenery(scene, assets, keepClear);
-  }
+  /** Um grupo por shard: liga/desliga a visibilidade de terreno + cenário daquele pedaço de uma vez. */
+  readonly shards = new Map<ShardId, THREE.Group>();
 
-  private buildTerrain(anisotropy: number): THREE.Mesh {
-    const geo = new THREE.PlaneGeometry(OVERWORLD.SIZE, OVERWORLD.SIZE, 220, 220);
-    geo.rotateX(-Math.PI / 2);
-    const pos = geo.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < pos.count; i++) pos.setY(i, Overworld.height(pos.getX(i), pos.getZ(i)));
-    geo.computeVertexNormals();
-    const normal = geo.attributes.normal as THREE.BufferAttribute, colors: number[] = [];
-    for (let i = 0; i < pos.count; i++) { // encosta íngreme vira terra, o resto grama
-      const ny = normal.getY(i), y = pos.getY(i);
-      const c = new THREE.Color(ny < 0.72 ? 0xb98a5a : ny < 0.85 ? 0x7aa24c : 0x4a9e38)
-        .offsetHSL(0, 0, Math.random() * 0.03 + (ny < 0.72 && y % 1.3 < 0.65 ? -0.06 : 0));
-      colors.push(c.r, c.g, c.b);
-    }
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const uv = geo.attributes.uv as THREE.BufferAttribute;
-    for (let i = 0; i < uv.array.length; i++) (uv.array as Float32Array)[i]! *= 40;
+  constructor(scene: THREE.Scene, assets: Assets, anisotropy: number, keepClear: THREE.Vector3[]) {
     const grass = ProceduralSprites.grassDetail();
     grass.anisotropy = anisotropy;
-    return new THREE.Mesh(geo, toonMaterial({ map: grass, vertexColors: true }));
+    const terrain = toonMaterial({ map: grass, vertexColors: true });
+    const scenery = Overworld.sceneryTextures(assets);
+    for (const coord of allShards()) {
+      const group = new THREE.Group();
+      group.name = `shard ${shardId(coord)}`;
+      const rng = seededRng(hashSeed(SHARD.WORLD_SEED, coord.sx, coord.sz));
+      group.add(Overworld.buildTerrain(coord, terrain, rng));
+      Overworld.scatterScenery(group, coord, scenery, keepClear, rng);
+      this.shards.set(shardId(coord), group);
+      scene.add(group);
+    }
+    scene.add(Overworld.buildSea());
   }
 
-  private scatterScenery(scene: THREE.Scene, assets: Assets, keepClear: THREE.Vector3[]): void {
-    const variants = {
+  /** Normal pela derivada da altura: igual dos dois lados da emenda entre shards (sem costura na luz). */
+  private static normalAt(x: number, z: number): THREE.Vector3 {
+    const e = 0.5;
+    return new THREE.Vector3(
+      Overworld.height(x - e, z) - Overworld.height(x + e, z), 2 * e, Overworld.height(x, z - e) - Overworld.height(x, z + e),
+    ).normalize();
+  }
+
+  private static buildTerrain(coord: ShardCoord, material: THREE.Material, rng: Rng): THREE.Mesh {
+    const seg = Overworld.SEGMENTS, origin = shardOrigin(coord);
+    const geo = new THREE.PlaneGeometry(SHARD.SIZE, SHARD.SIZE, seg, seg);
+    geo.rotateX(-Math.PI / 2);
+    geo.translate(origin.x + SHARD.SIZE / 2, 0, origin.y + SHARD.SIZE / 2);
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const normals = new Float32Array(pos.count * 3), colors: number[] = [];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i), y = Overworld.height(x, z), n = Overworld.normalAt(x, z);
+      pos.setY(i, y);
+      normals.set([n.x, n.y, n.z], i * 3);
+      const c = new THREE.Color(Overworld.groundColor(x, y, z, n.y, rng)).offsetHSL(0, 0, rng() * 0.03);
+      colors.push(c.r, c.g, c.b);
+    }
+    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.computeBoundingSphere();
+    // UV em coordenadas de mundo: a textura de detalhe continua sem emenda entre shards
+    const uv = geo.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / Overworld.DETAIL_TILE, -pos.getZ(i) / Overworld.DETAIL_TILE);
+    return new THREE.Mesh(geo, material);
+  }
+
+  /** Cor do chão: encosta íngreme vira terra/rocha; o resto segue o bioma (com borda pontilhada entre biomas). */
+  private static groundColor(x: number, y: number, z: number, ny: number, rng: Rng): number {
+    const w = Overworld.weights(x, z), jitter = (rng() - 0.5) * 0.25;
+    const best = Math.max(w.desert, w.ice, w.beach) + jitter;
+    const steep = ny < 0.72, mid = ny < 0.85;
+    if (best < 0.5) return steep ? (y % 1.3 < 0.65 ? 0xa57a4e : 0xb98a5a) : mid ? 0x7aa24c : 0x4a9e38;
+    if (best === w.desert + jitter) return steep ? 0xc0925a : mid ? 0xdcb978 : 0xebcf8e;
+    if (best === w.ice + jitter) return steep ? 0x8db6d8 : mid ? 0xcfe6f7 : 0xf2f9ff;
+    return y < OVERWORLD.SEA_Y + 0.4 ? 0xd2b87e : steep ? 0xc8ad74 : 0xf3e2a8; // areia molhada perto da água
+  }
+
+  private static buildSea(): THREE.Mesh {
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(OVERWORLD.SIZE * 1.6, 200),
+      toonMaterial({ color: 0x3aa6d8, transparent: true, opacity: 0.85 }));
+    sea.rotation.x = -Math.PI / 2;
+    sea.position.set(0, OVERWORLD.SEA_Y, OVERWORLD.HALF + 20);
+    return sea;
+  }
+
+  /** Texturas de cenário criadas uma vez e compartilhadas por todos os shards. */
+  private static sceneryTextures(assets: Assets): SceneryTextures {
+    return {
       tree: [ProceduralSprites.tree(), ProceduralSprites.tree(), ProceduralSprites.tree()],
       pink: [ProceduralSprites.pinkTree(), ProceduralSprites.pinkTree()],
       bush: [ProceduralSprites.bush(), ProceduralSprites.bush()],
       props: [assets.pixel('barril'), assets.pixel('vaso')],
       flower: ['#ffd23a', '#ff6f91', '#7ec8ff', '#ffffff'].map(ProceduralSprites.flower),
+      cactus: [BiomeSprites.cactus(), BiomeSprites.cactus()],
+      pine: [BiomeSprites.pine(), BiomeSprites.pine()],
+      palm: [BiomeSprites.palm(), BiomeSprites.palm()],
+      sandRock: [BiomeSprites.sandRock()], iceRock: [BiomeSprites.iceRock()], deadBush: [BiomeSprites.deadBush()],
+      tuft: new THREE.SpriteMaterial({ map: ProceduralSprites.tuft(), transparent: true, alphaTest: 0.5 }),
+    };
+  }
+
+  private static scatterScenery(group: THREE.Group, coord: ShardCoord, v: SceneryTextures, keepClear: THREE.Vector3[], rng: Rng): void {
+    const origin = shardOrigin(coord), R = OVERWORLD.HALF - 12;
+    const spot = (): { x: number; z: number } | null => {
+      const x = origin.x + rng() * SHARD.SIZE, z = origin.y + rng() * SHARD.SIZE;
+      return Math.abs(x) > R || Math.abs(z) > R ? null : { x, z };
     };
     const add = (map: THREE.Texture, w: number, h: number, x: number, z: number): void => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, alphaTest: 0.5 }));
       s.scale.set(w, h, 1); s.center.set(0.5, 0);
       s.position.set(x, Overworld.height(x, z) - 0.05, z);
-      scene.add(s);
+      group.add(s);
     };
-    for (let i = 0; i < 260; i++) {
-      const x = rnd(-100, 100), z = rnd(-100, 100);
-      if (Math.hypot(x, z) < 6 || keepClear.some((p) => Math.hypot(x - p.x, z - p.z) < 3)) continue;
-      const r = Math.random();
-      if (r < 0.3) { const k = rnd(5, 7); add(pick(variants.tree), k * 0.8, k, x, z); }
-      else if (r < 0.4) add(pick(variants.pink), 4, 4.8, x, z);
-      else if (r < 0.6) add(pick(variants.bush), 2.4, 1.6, x, z);
-      else if (r < 0.7) add(pick(variants.props), 1.4, 1.4, x, z);
-      else add(pick(variants.flower), 0.6, 1, x, z);
+    for (let i = 0; i < Overworld.PROPS_PER_SHARD; i++) {
+      const p = spot(), r = rng();
+      if (!p) continue;
+      const { x, z } = p;
+      if (Math.hypot(x, z) < 6 || keepClear.some((c) => Math.hypot(x - c.x, z - c.z) < 3)) continue;
+      if (Overworld.height(x, z) < OVERWORLD.SEA_Y + 0.3) continue; // nada dentro do mar
+      switch (Overworld.biome(x, z)) {
+        case 'desert':
+          if (r < 0.35) { const k = rngRange(rng, 3, 4.5); add(rngPick(rng, v.cactus), k * 0.62, k, x, z); }
+          else if (r < 0.6) add(rngPick(rng, v.deadBush), 2, 1.25, x, z);
+          else if (r < 0.75) add(rngPick(rng, v.sandRock), 1.8, 1.3, x, z);
+          break;
+        case 'ice':
+          if (r < 0.45) { const k = rngRange(rng, 5, 7.5); add(rngPick(rng, v.pine), k * 0.67, k, x, z); }
+          else if (r < 0.65) add(rngPick(rng, v.iceRock), 2, 1.4, x, z);
+          break;
+        case 'beach':
+          if (r < 0.3) { const k = rngRange(rng, 6, 8); add(rngPick(rng, v.palm), k * 0.75, k, x, z); }
+          else if (r < 0.45) add(rngPick(rng, v.sandRock), 1.4, 1, x, z);
+          break;
+        default:
+          if (r < 0.3) { const k = rngRange(rng, 5, 7); add(rngPick(rng, v.tree), k * 0.8, k, x, z); }
+          else if (r < 0.4) add(rngPick(rng, v.pink), 4, 4.8, x, z);
+          else if (r < 0.6) add(rngPick(rng, v.bush), 2.4, 1.6, x, z);
+          else if (r < 0.7) add(rngPick(rng, v.props), 1.4, 1.4, x, z);
+          else add(rngPick(rng, v.flower), 0.6, 1, x, z);
+      }
     }
-    const tuft = new THREE.SpriteMaterial({ map: ProceduralSprites.tuft(), transparent: true, alphaTest: 0.5 });
-    for (let i = 0; i < 1800; i++) {
-      const x = rnd(-100, 100), z = rnd(-100, 100), y = Overworld.height(x, z);
-      if (y > 7) continue;
-      const t = new THREE.Sprite(tuft), k = rnd(0.6, 1.1);
-      t.scale.set(k, k * 0.75, 1); t.center.set(0.5, 0); t.position.set(x, y - 0.05, z);
-      scene.add(t);
+    for (let i = 0; i < Overworld.TUFTS_PER_SHARD; i++) {
+      const p = spot(), k = rngRange(rng, 0.6, 1.1);
+      if (!p) continue;
+      const y = Overworld.height(p.x, p.z);
+      if (y > 7 || Overworld.biome(p.x, p.z) !== 'grass') continue;
+      const t = new THREE.Sprite(v.tuft);
+      t.scale.set(k, k * 0.75, 1); t.center.set(0.5, 0); t.position.set(p.x, y - 0.05, p.z);
+      group.add(t);
     }
   }
 }

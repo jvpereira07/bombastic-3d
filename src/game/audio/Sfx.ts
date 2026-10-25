@@ -8,6 +8,9 @@ export class Sfx {
   private lastNote = 0;
   constructor(private readonly audio: AudioEngine) {}
 
+  maraca(): void {
+    for (let i = 0; i < 4; i++) this.audio.noise({ dur: 0.06, freq: 5200, f2: 3800, vol: 0.18, q: 1.2, delay: i * 0.07 });
+  }
   slash(): void { this.audio.noise({ dur: 0.13, freq: 3000, f2: 700, vol: 0.22, q: 0.8 }); }
   hit(): void { this.audio.tone({ f: 240, f2: 90, dur: 0.09, vol: 0.2 }); }
   hurt(): void { this.audio.tone({ f: 320, f2: 70, type: 'sawtooth', dur: 0.28, vol: 0.2 }); }

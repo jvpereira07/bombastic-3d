@@ -28,6 +28,8 @@ export abstract class Actor extends Entity implements Hittable {
     this.body = new Billboard(game.scene, first.texture, size, size, anchorY);
   }
 
+  get position(): THREE.Vector3 { return this.pos; }
+
   get canBeHit(): boolean { return this.alive && this.hp > 0; }
   abstract takeHit(direction: THREE.Vector3): void;
 

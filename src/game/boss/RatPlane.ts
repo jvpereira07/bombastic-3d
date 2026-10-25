@@ -1,7 +1,6 @@
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { rnd } from '../../engine/math';
-import { SEWER } from '../config';
 import type { Game } from '../Game';
 import { Entity } from '../entities/Entity';
 import { Paratrooper } from './Paratrooper';
@@ -12,6 +11,8 @@ export class RatPlane extends Entity {
   private static readonly ALTITUDE = 8.5;
   private x: number;
   private readonly z: number;
+  private readonly cx: number;
+  private readonly halfWidth: number;
   private readonly velocity: number;
   private readonly drops: number[];
   private anim = 0;
@@ -20,11 +21,12 @@ export class RatPlane extends Entity {
 
   constructor(game: Game) {
     super(game);
-    const { SX, SW, SL, AL } = SEWER, fromLeft = Math.random() < 0.5;
-    this.z = rnd(SL + 6, SL + AL - 6);
-    this.x = fromLeft ? SX - SW - 6 : SX + SW + 6;
+    const a = game.world.sewer.arena, fromLeft = Math.random() < 0.5;
+    this.cx = a.center.x; this.halfWidth = (a.maxX - a.minX) / 2;
+    this.z = rnd(a.minZ + 6, a.maxZ - 6);
+    this.x = fromLeft ? a.minX - 6 : a.maxX + 6;
     this.velocity = fromLeft ? RatPlane.SPEED : -RatPlane.SPEED;
-    this.drops = [rnd(-10, -3), rnd(-3, 3), rnd(3, 10)].map((dx) => SX + dx);
+    this.drops = [rnd(-10, -3), rnd(-3, 3), rnd(3, 10)].map((dx) => this.cx + dx);
     this.sheet = new SpriteSheet(game.assets.texture('plane'), 2, 1);
     this.sprite = new Billboard(game.scene, this.sheet.texture, 5.2, 3.9, 0.5);
   }
@@ -41,7 +43,7 @@ export class RatPlane extends Entity {
         this.drops.splice(i, 1);
       }
     }
-    if (Math.abs(this.x - SEWER.SX) > SEWER.SW + 8) this.alive = false;
+    if (Math.abs(this.x - this.cx) > this.halfWidth + 8) this.alive = false;
   }
 
   dispose(): void { this.sprite.dispose(); this.sheet.dispose(); }

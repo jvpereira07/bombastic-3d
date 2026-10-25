@@ -18,7 +18,8 @@ npm run preview    # serve o dist/
 | Espaço | pula |
 | F ou J | ataca (corte em projétil, combo de 3) |
 | Q ou 1 | bebe poção |
-| Shift | dash (precisa do Chapéu do Ligeirinho) |
+| G | troca entre espada e maraca (segunda mão, ataque de longe na direção da câmera; precisa pegá-la) |
+| Shift | dash (precisa do Chapéu do Ligeirinho); atropela e empurra inimigos |
 | E | usa a tampa do esgoto |
 | M | liga/desliga o som |
 | Roda do mouse | zoom |
@@ -26,6 +27,14 @@ npm run preview    # serve o dist/
 ## Mundo de testes
 
 `npm run start:test` (ou `/?test`) abre um mundo branco e plano, sem ratos. **C** abre o menu criativo (invocar ratos, ratos-bomba, paraquedistas, poções, chapéu, explosões; curar, limpar inimigos, ir ao início ou à arena do chefe) e **R** cria um rato perto do jogador.
+
+## Shards
+
+O mundo é dividido em shards de 55 m (grade 8 x 8, mais o esgoto como shard próprio): geração determinística por semente, só os shards próximos são desenhados e simulados, e a base para assinar estado por região no multiplayer. Detalhes em [docs/shards.md](docs/shards.md).
+
+## Esgoto procedural
+
+Cada descida pela tampa gera uma masmorra nova (salas, galerias com canal e pontes, arena do chefe longe da entrada) a partir de uma semente. A engine fica em src/engine/procedural; detalhes em [docs/procedural.md](docs/procedural.md).
 
 ## Estrutura
 

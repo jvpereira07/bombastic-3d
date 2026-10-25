@@ -1,4 +1,5 @@
 import type { Assets } from '../../engine/Assets';
+import type { Weapon } from '../entities/Player';
 import { ITEMS } from '../items/items';
 
 /** Limites do preenchimento nas imagens das barras: início, fim e largura total (px). */
@@ -13,7 +14,7 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 
 export interface HudState {
   hp: number; maxHp: number; stamina: number; maxStamina: number;
-  potions: number; hasHat: boolean;
+  potions: number; hasHat: boolean; hasMaraca: boolean; weapon: Weapon;
   boss: { visible: boolean; hp: number; maxHp: number };
   showManholePrompt: boolean;
 }
@@ -26,6 +27,9 @@ export class Hud {
   private readonly potionCount = $('#potN');
   private readonly potionSlot = $('#potSlot');
   private readonly hatSlot = $('#hatSlot');
+  private readonly weaponSlot = $('#weaponSlot');
+  private readonly weaponImg = $<HTMLImageElement>('#weaponImg');
+  private readonly weaponIcons: Record<Weapon, string>;
   private readonly bossPanel = $('#boss');
   private readonly bossFill = $('#boss i');
   private readonly banner = $('#banner');
@@ -42,6 +46,7 @@ export class Hud {
     for (const slot of document.querySelectorAll<HTMLElement>('.slot')) slot.style.backgroundImage = `url(${assets.url('ui_slot')})`;
     $<HTMLImageElement>('#potImg').src = assets.url(ITEMS.potion.icon);
     $<HTMLImageElement>('#hatImg').src = assets.url(ITEMS.sombrero.icon);
+    this.weaponIcons = { sword: assets.url('sword'), maraca: assets.url(ITEMS.maraca.icon) };
   }
 
   onMuteClick(handler: () => void): void {
@@ -64,6 +69,8 @@ export class Hud {
     this.potionCount.textContent = String(s.potions);
     this.potionSlot.classList.toggle('off', s.potions === 0);
     this.hatSlot.classList.toggle('off', !s.hasHat);
+    this.weaponSlot.classList.toggle('off', !s.hasMaraca); // sem maraca não há o que trocar
+    if (!this.weaponImg.src.endsWith(this.weaponIcons[s.weapon])) this.weaponImg.src = this.weaponIcons[s.weapon];
     this.bossPanel.hidden = !s.boss.visible;
     this.bossFill.style.width = `${(s.boss.hp / s.boss.maxHp) * 100}%`;
     this.prompt.hidden = !s.showManholePrompt;

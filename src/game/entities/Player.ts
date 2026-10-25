@@ -2,12 +2,18 @@ import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { facingRow } from '../../engine/math';
-import { PHYSICS, PLAYER } from '../config';
+import { MARACA, PHYSICS, PLAYER } from '../config';
 import type { Game } from '../Game';
 import { Inventory } from '../items/Inventory';
 import { ITEMS, type ItemId } from '../items/items';
-import { Entity } from './Entity';
+import { Entity, type Hittable } from './Entity';
+import { MaracaShot } from './MaracaShot';
 import { SlashProjectile } from './SlashProjectile';
+
+/** Ordem das linhas do pygame (direita, esquerda, baixo, cima) para as do jogo (costas, esquerda, frente, direita). */
+const PYGAME_DIR = [3, 1, 2, 0] as const;
+
+export type Weapon = 'sword' | 'maraca';
 
 /** Folhas do corpo e a camada de chapéu correspondente (mesma grade, desenhada por cima). */
 interface Layered { body: SpriteSheet; hat: SpriteSheet }
@@ -28,12 +34,17 @@ export class Player extends Entity {
   private attackTimer = 0;
   private attackFired = false;
   private combo = 0;
+  /** Arma na mão; o ataque (clique/F) usa ela. G troca quando já tem a maraca. */
+  weapon: Weapon = 'sword';
+  private attackDuration: number = PLAYER.ATTACK_TIME;
+  private readonly dashHit = new Set<Hittable>();
   private dashTimer = 0;
   private dashCooldown = 0;
   private walkAnim = 0;
 
   private readonly move: Layered;
   private readonly attackSheets: Layered;
+  private readonly maracaSheets: Layered;
   private readonly dashSheets: Layered;
   private readonly body: Billboard;
   private readonly hat: Billboard;
@@ -47,6 +58,7 @@ export class Player extends Entity {
     this.move = layered('player_move', 'hat_move', 7);          // col 0 parado, 1-6 andando
     this.attackSheets = layered('player_atk', 'hat_atk', 18);   // combo de 3 golpes x 6 quadros
     this.dashSheets = layered('player_dash', 'hat_dash', 8);
+    this.maracaSheets = { body: new SpriteSheet(Player.maracaAttackTexture(a), 18, 4), hat: new SpriteSheet(a.texture('hat_atk'), 18, 4) };
     this.body = new Billboard(game.scene, this.move.body.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
     this.hat = new Billboard(game.scene, this.move.hat.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
     this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.7, 20),
@@ -70,15 +82,29 @@ export class Player extends Entity {
 
   attack(): void {
     if (this.attacking || this.dead || this.dashing) return;
-    this.attackTimer = PLAYER.ATTACK_TIME; this.attackFired = false;
+    this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : PLAYER.ATTACK_TIME;
+    this.attackTimer = this.attackDuration; this.attackFired = false;
     this.combo = (this.combo + 1) % 3;
-    this.game.sfx.slash();
+    if (this.weapon === 'maraca') {
+      // de longe mira para onde a câmera olha
+      const yaw = this.game.camera.yaw;
+      this.dir.set(-Math.sin(yaw), -Math.cos(yaw));
+      this.game.sfx.maraca();
+    } else this.game.sfx.slash();
+  }
+
+  /** Troca entre espada e maraca (a maraca vai na segunda mão; precisa tê-la). */
+  switchWeapon(): void {
+    if (!this.inventory.hasAbility('maraca') || this.attacking || this.dead) return;
+    this.weapon = this.weapon === 'sword' ? 'maraca' : 'sword';
+    this.game.sfx.pickup();
   }
 
   dash(): void {
     if (!this.inventory.hasAbility('dash') || this.dead || this.dashing || this.dashCooldown > 0 || this.stamina < PLAYER.DASH_COST) return;
     this.stamina -= PLAYER.DASH_COST;
     this.dashTimer = PLAYER.DASH_TIME; this.dashCooldown = PLAYER.DASH_COOLDOWN; this.attackTimer = 0;
+    this.dashHit.clear();
     this.game.sfx.dash();
   }
 
@@ -96,7 +122,10 @@ export class Player extends Entity {
   collect(item: ItemId): boolean {
     if (!this.inventory.add(item)) return false;
     const def = ITEMS[item];
-    if (def.kind === 'equipment') { this.game.sfx.hat(); this.game.hud.showBanner(`${def.name}! Shift para dar dash`); }
+    if (def.kind === 'equipment') {
+      this.game.sfx.hat();
+      this.game.hud.showBanner(def.grants.includes('maraca') ? `${def.name}! G troca entre espada e maraca (ataque de longe)` : `${def.name}! Shift para dar dash`);
+    }
     else this.game.sfx.pickup();
     return true;
   }
@@ -136,13 +165,49 @@ export class Player extends Entity {
       if (!this.attackFired && this.attackProgress >= 1 / 6) {
         this.attackFired = true;
         const dir = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
-        this.game.spawn(new SlashProjectile(this.game, this.pos, dir, this.row));
+        if (this.weapon === 'maraca') this.game.spawn(new MaracaShot(this.game, this.pos, dir, this.row, this.combo));
+        else this.game.spawn(new SlashProjectile(this.game, this.pos, dir, this.row));
       }
     }
+    if (this.dashing) this.dashThrough();
     this.render(moving);
   }
 
-  private get attackProgress(): number { return 1 - this.attackTimer / PLAYER.ATTACK_TIME; }
+  private get attackProgress(): number { return 1 - this.attackTimer / this.attackDuration; }
+
+  /** O dash atropela: cada inimigo no caminho leva um golpe e é jogado para o lado. */
+  private dashThrough(): void {
+    const dir = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
+    for (const target of this.game.hittables()) {
+      if (this.dashHit.has(target) || !target.canBeHit) continue;
+      const offset = target.pos.clone().sub(this.pos).setY(0);
+      if (offset.length() > target.hitRadius + 0.4 || Math.abs(target.pos.y - this.pos.y) > 1.6) continue;
+      this.dashHit.add(target);
+      const side = new THREE.Vector3(-dir.z, 0, dir.x);
+      if (side.dot(offset) < 0) side.negate();
+      target.takeHit(dir.add(side).normalize().multiplyScalar(PLAYER.DASH_KNOCKBACK));
+    }
+  }
+
+  /** Ataque com a maraca: corpo do pygame sem a espada + camada da maraca, na ordem de linhas do jogo. */
+  private static maracaAttackTexture(assets: Game['assets']): THREE.Texture {
+    const body = assets.texture('player_raw').image as HTMLImageElement;
+    const maraca = assets.texture('maraca_anim').image as HTMLImageElement;
+    const T = 32, canvas = document.createElement('canvas');
+    canvas.width = 18 * T; canvas.height = 4 * T;
+    const g = canvas.getContext('2d');
+    if (!g) throw new Error('Canvas 2D indisponível');
+    PYGAME_DIR.forEach((d, row) => {
+      for (let k = 0; k < 3; k++) for (let c = 0; c < 6; c++) {
+        const x = (k * 6 + c) * T, y = row * T;
+        g.drawImage(body, c * T, (16 + 4 * k + d) * T, T, T, x, y, T, T);
+        g.drawImage(maraca, c * T, (4 * k + d) * T, T, T, x, y, T, T);
+      }
+    });
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
 
   /** Movimento relativo à câmera; devolve se está andando. */
   private walk(dt: number): boolean {
@@ -187,7 +252,7 @@ export class Player extends Entity {
       sheets = this.dashSheets;
       sheets.body.setProgress(row, 1 - this.dashTimer / PLAYER.DASH_TIME, 8);
     } else if (this.attacking) {
-      sheets = this.attackSheets;
+      sheets = this.weapon === 'maraca' ? this.maracaSheets : this.attackSheets;
       sheets.body.setProgress(row, this.attackProgress, 6, this.combo * 6);
     } else {
       sheets = this.move;

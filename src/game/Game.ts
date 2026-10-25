@@ -11,7 +11,7 @@ import { MusicNote } from './boss/MusicNote';
 import { MrKabumstic } from './boss/MrKabumstic';
 import { Paratrooper } from './boss/Paratrooper';
 import { RatPlane } from './boss/RatPlane';
-import { BOSS, PLAYER, SEWER } from './config';
+import { BOSS, PLAYER } from './config';
 import { BombRat } from './entities/BombRat';
 import type { Entity, Hittable } from './entities/Entity';
 import { Explosion } from './entities/Explosion';
@@ -50,7 +50,7 @@ export class Game {
     this.boss = new MrKabumstic(this);
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
     if (mode === 'test') this.setupTest();
-    else { this.spawner.populate(); this.placeItems(); this.placeGators(); }
+    else { this.spawner.populate(); this.placeItems(); this.stockSewer(this.world.sewer.layout.seed); }
     this.bindInput();
   }
 
@@ -67,7 +67,7 @@ export class Game {
     return targets;
   }
 
-  isPlayerInArena(): boolean { return Sewer.inArena(this.player.pos); }
+  isPlayerInArena(): boolean { return this.world.sewer.inArena(this.player.pos); }
 
   minionCount(): number {
     return this.entities.filter((e) => ((e instanceof Rat || e instanceof BombRat) && e.minion && e.alive) || e instanceof Paratrooper).length;
@@ -99,10 +99,11 @@ export class Game {
   // ---------- laço ----------
   update(dt: number): void {
     this.player.update(dt);
-    for (const e of this.entities) if (e.alive) e.update(dt);
+    this.world.shards.update(this.player.pos);
+    for (const e of this.entities) if (e.alive && this.world.shards.simulates(e.position)) e.update(dt);
     this.boss.update(dt);
     this.removeDead();
-    this.world.update(dt);
+    this.world.update(dt, this.player.pos);
 
     const p = this.player.pos, ground = this.world.groundAt(p.x, p.z);
     this.camera.update(dt, p.clone().setY(ground + (p.y - ground) * 0.5 + 1.8)); // só metade do pulo, para não sacudir
@@ -113,7 +114,7 @@ export class Game {
 
     this.hud.render({
       hp: this.player.hp, maxHp: PLAYER.MAX_HP, stamina: this.player.stamina, maxStamina: PLAYER.MAX_STAMINA,
-      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'),
+      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'), hasMaraca: this.player.inventory.has('maraca'), weapon: this.player.weapon,
       boss: { visible: this.boss.fighting, hp: this.boss.hp, maxHp: BOSS.HP },
       showManholePrompt: !this.player.dead && this.world.manholeNear(p) !== undefined,
     });
@@ -130,9 +131,28 @@ export class Game {
     const cover = this.world.manholeNear(this.player.pos);
     if (!cover || this.player.dead) return;
     this.sfx.manhole();
-    this.player.teleport(cover.to);
+    if (Sewer.contains(cover.to.x)) { this.enterSewer(); return; }
+    this.arrive(cover.to);
+  }
+
+  private arrive(at: THREE.Vector3): void {
+    this.player.teleport(at);
     this.camera.snapTo(this.player.pos.clone().setY(this.player.pos.y + 1.8));
     this.world.applyAtmosphere(this.world.zoneOf(this.player.pos));
+  }
+
+  /** Cada descida gera um esgoto novo: troca a masmorra, limpa quem estava lá e repovoa. */
+  enterSewer(): void {
+    const seed = Sewer.newSeed();
+    this.world.regenerateSewer(seed);
+    for (const e of this.entities) {
+      const pos = e.position;
+      if ((pos && Sewer.contains(pos.x)) || e instanceof RatPlane || e instanceof MusicNote || e instanceof Paratrooper) e.alive = false;
+    }
+    this.boss.reset();
+    this.spawner.populateSewer();
+    this.stockSewer(seed);
+    this.arrive(this.world.sewer.entry);
   }
 
   private bindInput(): void {
@@ -145,6 +165,7 @@ export class Game {
     input.onKey(['KeyF', 'KeyJ'], () => player.attack());
     input.onKey(['KeyQ', 'Digit1'], () => player.drinkPotion());
     input.onKey(['ShiftLeft', 'ShiftRight'], () => player.dash());
+    input.onKey(['KeyG'], () => player.switchWeapon());
     input.onKey(['KeyE'], () => this.useManhole());
     const toggleMute = (): void => this.hud.setMuted(this.audio.toggleMute());
     input.onKey(['KeyM'], toggleMute);
@@ -157,6 +178,7 @@ export class Game {
     this.hud.showBanner('Mundo de testes · C abre o menu criativo');
     for (let i = 0; i < 3; i++) this.dropItem('potion', -3 + i * 3, 4);
     this.dropItem('sombrero', 0, -4);
+    this.dropItem('maraca', 3, -4);
     this.spawn(new Gator(this, TestArena.RIVER_X, 0));
     this.input.onKey(['KeyR'], () => {
       const a = Math.random() * Math.PI * 2, p = this.player.pos;
@@ -164,23 +186,21 @@ export class Game {
     });
   }
 
-  /** Jacarés parados no canal do esgoto, entre as pontes. */
-  private placeGators(): void {
-    for (const z of [-22, -6, 26]) this.spawn(new Gator(this, SEWER.SX, z));
+  /** Jacarés nos canais e poções nas salas da masmorra atual. */
+  private stockSewer(seed: number): void {
+    for (const p of this.world.sewer.waterSpots(4, seed)) this.spawn(new Gator(this, p.x, p.z));
+    for (let i = 0; i < 5; i++) { const p = this.world.sewer.randomFloor(); this.dropItem('potion', p.x, p.z); }
   }
 
-  /** Poções pelo mapa, no esgoto e na arena; o chapéu no ponto mais alto perto do início. */
+  /** Poções pelo mapa; o chapéu no ponto mais alto perto do início. */
   private placeItems(): void {
-    const { SX, SW, SL, AL, CH } = SEWER;
     for (let i = 0; i < 8; i++) { const a = Math.random() * Math.PI * 2, r = rnd(12, 70); this.dropItem('potion', Math.cos(a) * r, Math.sin(a) * r); }
-    for (const z of [-25, -5, 15, 30]) this.dropItem('potion', SX + (z % 2 ? -1 : 1) * rnd(CH + 2, SW - 2), z);
-    this.dropItem('potion', SX - SW + 3, SL + AL - 3);
-    this.dropItem('potion', SX + SW - 3, SL + AL - 3);
     let best = { x: -14, z: -14, h: -Infinity };
     for (let k = 0; k < 200; k++) {
       const x = rnd(-30, 30), z = rnd(-30, 30), h = Overworld.height(x, z);
       if (Math.hypot(x, z) >= 12 && h > best.h) best = { x, z, h };
     }
     this.dropItem('sombrero', best.x, best.z);
+    this.dropItem('maraca', -6, 5);
   }
 }

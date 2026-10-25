@@ -7,7 +7,7 @@ export interface System { update(dt: number): void }
 export class Engine {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
+  readonly camera = new THREE.PerspectiveCamera(60, 1, 0.1, 600);
   private readonly clock = new THREE.Clock();
   private readonly systems: System[] = [];
   private static readonly MAX_DT = 0.05;
