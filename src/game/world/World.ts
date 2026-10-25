@@ -6,13 +6,17 @@ import { OVERWORLD, SEWER } from '../config';
 import { ManholeCover } from './ManholeCover';
 import { Overworld } from './Overworld';
 import { Sewer } from './Sewer';
+import { TestArena } from './TestArena';
 
 export type Zone = 'overworld' | 'sewer';
+export type WorldMode = 'normal' | 'test';
 
-const ATMOSPHERE: Record<Zone, { sky: number; fog: number; near: number; far: number }> = {
+type Atmosphere = { sky: number; fog: number; near: number; far: number };
+const ATMOSPHERE: Record<Zone, Atmosphere> = {
   overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 45, far: 150 },
   sewer: { sky: 0x0d1410, fog: 0x0d1410, near: 8, far: 45 },
 };
+const TEST_ATMOSPHERE: Atmosphere = { sky: 0xffffff, fog: 0xffffff, near: 60, far: 160 };
 
 /** Junta as áreas: altura do chão, limites, clima e as tampas que ligam uma à outra. */
 export class World implements CameraWorld {
@@ -21,9 +25,10 @@ export class World implements CameraWorld {
   private readonly fog = new THREE.Fog(0xbfe6ff, 45, 150);
   private readonly sky = new THREE.Color(0x8fd3ff);
 
-  constructor(private readonly scene: THREE.Scene, assets: Assets, anisotropy: number) {
+  constructor(private readonly scene: THREE.Scene, assets: Assets, anisotropy: number, readonly mode: WorldMode = 'normal') {
     scene.background = this.sky;
     scene.fog = this.fog;
+    this.applyAtmosphere('overworld');
     scene.add(new THREE.HemisphereLight(0xffffff, 0x5a8a3a, 0.9 * Math.PI));
     const sun = new THREE.DirectionalLight(0xffffff, 0.6 * Math.PI);
     sun.position.set(30, 60, 20);
@@ -31,7 +36,8 @@ export class World implements CameraWorld {
 
     const surfaceLid = new THREE.Vector3(5, 0, 8);
     const sewerLid = new THREE.Vector3(SEWER.SX + SEWER.CH + 3, 0, -SEWER.SL + 3);
-    new Overworld(scene, assets, anisotropy, [surfaceLid]);
+    if (mode === 'test') new TestArena(scene);
+    else new Overworld(scene, assets, anisotropy, [surfaceLid]);
     this.sewer = new Sewer(scene, assets, anisotropy);
     const grate = assets.pixel('grate');
     this.manholes = [
@@ -43,11 +49,13 @@ export class World implements CameraWorld {
   zoneOf(p: THREE.Vector3): Zone { return Sewer.contains(p.x) ? 'sewer' : 'overworld'; }
   sameZone(a: THREE.Vector3, b: THREE.Vector3): boolean { return this.zoneOf(a) === this.zoneOf(b); }
 
-  readonly groundAt = (x: number, z: number): number => (Sewer.contains(x) ? Sewer.height(x, z) : Overworld.height(x, z));
+  private surfaceHeight(x: number, z: number): number { return this.mode === 'test' ? TestArena.height() : Overworld.height(x, z); }
+
+  readonly groundAt = (x: number, z: number): number => (Sewer.contains(x) ? Sewer.height(x, z) : this.surfaceHeight(x, z));
 
   /** Chão sob alguém; pontes só seguram quem já está na altura delas. */
   groundUnder(p: THREE.Vector3): number {
-    return Sewer.contains(p.x) ? Sewer.height(p.x, p.z, p.y >= -0.05) : Overworld.height(p.x, p.z);
+    return Sewer.contains(p.x) ? Sewer.height(p.x, p.z, p.y >= -0.05) : this.surfaceHeight(p.x, p.z);
   }
 
   clampToZone(p: THREE.Vector3): void {
@@ -65,7 +73,7 @@ export class World implements CameraWorld {
   manholeNear(p: THREE.Vector3): ManholeCover | undefined { return this.manholes.find((m) => m.isNear(p)); }
 
   applyAtmosphere(zone: Zone): void {
-    const a = ATMOSPHERE[zone];
+    const a = zone === 'overworld' && this.mode === 'test' ? TEST_ATMOSPHERE : ATMOSPHERE[zone];
     this.sky.set(a.sky); this.fog.color.set(a.fog); this.fog.near = a.near; this.fog.far = a.far;
     this.scene.background = this.sky;
   }

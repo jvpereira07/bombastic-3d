@@ -12,8 +12,9 @@ async function boot(): Promise<void> {
   if (!canvas) throw new Error('Canvas #game ausente');
   const assets = new Assets(IMAGE_URLS);
   await assets.loadAll();
+  const mode = new URLSearchParams(location.search).has('test') ? 'test' : 'normal';
   const engine = new Engine(canvas);
-  const game = new Game(engine, assets, new Input(canvas), new AudioEngine(), new Hud(assets));
+  const game = new Game(engine, assets, new Input(canvas), new AudioEngine(), new Hud(assets), mode);
   engine.add(game);
   engine.start();
   Object.assign(window, { game }); // atalho para depurar no console

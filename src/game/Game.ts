@@ -23,7 +23,7 @@ import { RatSpawner } from './RatSpawner';
 import type { Hud } from './ui/Hud';
 import { Overworld } from './world/Overworld';
 import { Sewer } from './world/Sewer';
-import { World } from './world/World';
+import { World, type WorldMode } from './world/World';
 
 /** Junta mundo, jogador, entidades, chefe, interface e som; é o único que conhece todos. */
 export class Game {
@@ -37,17 +37,17 @@ export class Game {
   private readonly music: BossMusic;
   private entities: Entity[] = [];
 
-  constructor(readonly engine: Engine, readonly assets: Assets, readonly input: Input, private readonly audio: AudioEngine, readonly hud: Hud) {
+  constructor(readonly engine: Engine, readonly assets: Assets, readonly input: Input, private readonly audio: AudioEngine, readonly hud: Hud, mode: WorldMode = 'normal') {
     this.scene = engine.scene;
-    this.world = new World(this.scene, assets, engine.maxAnisotropy);
+    this.world = new World(this.scene, assets, engine.maxAnisotropy, mode);
     this.camera = new ThirdPersonCamera(engine.camera, this.world);
     this.sfx = new Sfx(audio);
     this.music = new BossMusic(audio);
     this.player = new Player(this);
     this.boss = new MrKabumstic(this);
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
-    this.spawner.populate();
-    this.placeItems();
+    if (mode === 'test') this.setupTest();
+    else { this.spawner.populate(); this.placeItems(); }
     this.bindInput();
   }
 
@@ -141,6 +141,16 @@ export class Game {
     const toggleMute = (): void => this.hud.setMuted(this.audio.toggleMute());
     input.onKey(['KeyM'], toggleMute);
     this.hud.onMuteClick(toggleMute);
+  }
+
+  /** Mundo de testes: sem ratos, itens ao lado do início; R cria um rato perto do jogador. */
+  private setupTest(): void {
+    for (let i = 0; i < 3; i++) this.dropItem('potion', -3 + i * 3, 4);
+    this.dropItem('sombrero', 0, -4);
+    this.input.onKey(['KeyR'], () => {
+      const a = Math.random() * Math.PI * 2, p = this.player.pos;
+      this.spawn(new Rat(this, p.x + Math.cos(a) * 8, p.z + Math.sin(a) * 8));
+    });
   }
 
   /** Poções pelo mapa, no esgoto e na arena; o chapéu no ponto mais alto perto do início. */
