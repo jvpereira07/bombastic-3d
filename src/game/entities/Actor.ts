@@ -11,6 +11,8 @@ export abstract class Actor extends Entity implements Hittable {
   readonly pos: THREE.Vector3;
   readonly vel = new THREE.Vector3();
   vy = 0;
+  /** Empurrão de golpe, somado à velocidade e amortecido sozinho. */
+  readonly knockback = new THREE.Vector3();
   readonly look = new THREE.Vector2(0, 1);
   hurtTimer = 0;
   abstract readonly hitRadius: number;
@@ -33,8 +35,9 @@ export abstract class Actor extends Entity implements Hittable {
 
   /** Anda pela velocidade, respeita os limites da área e cai com a gravidade. */
   protected integrate(dt: number): void {
-    this.pos.x += this.vel.x * dt;
-    this.pos.z += this.vel.z * dt;
+    this.pos.x += (this.vel.x + this.knockback.x) * dt;
+    this.pos.z += (this.vel.z + this.knockback.z) * dt;
+    this.knockback.multiplyScalar(Math.exp(-dt * 6));
     this.game.world.clampToZone(this.pos);
     this.vy -= PHYSICS.GRAVITY * dt;
     this.pos.y += this.vy * dt;

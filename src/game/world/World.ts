@@ -13,7 +13,7 @@ export type WorldMode = 'normal' | 'test';
 
 type Atmosphere = { sky: number; fog: number; near: number; far: number };
 const ATMOSPHERE: Record<Zone, Atmosphere> = {
-  overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 45, far: 150 },
+  overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 80, far: 230 },
   sewer: { sky: 0x0d1410, fog: 0x0d1410, near: 8, far: 45 },
 };
 const TEST_ATMOSPHERE: Atmosphere = { sky: 0xffffff, fog: 0xffffff, near: 60, far: 160 };
@@ -22,7 +22,7 @@ const TEST_ATMOSPHERE: Atmosphere = { sky: 0xffffff, fog: 0xffffff, near: 60, fa
 export class World implements CameraWorld {
   readonly sewer: Sewer;
   readonly manholes: ManholeCover[];
-  private readonly fog = new THREE.Fog(0xbfe6ff, 45, 150);
+  private readonly fog = new THREE.Fog(0xbfe6ff, 80, 230);
   private readonly sky = new THREE.Color(0x8fd3ff);
 
   constructor(private readonly scene: THREE.Scene, assets: Assets, anisotropy: number, readonly mode: WorldMode = 'normal') {

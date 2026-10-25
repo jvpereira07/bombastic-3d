@@ -87,6 +87,7 @@ def main() -> None:
         'ui_hp_full': 'GUI/inventory/BARRA_VIDA_CHEIA.png', 'ui_hp_empty': 'GUI/inventory/BARRA_VIDA_VAZIA.png',
         'ui_st_full': 'GUI/inventory/BARRA_ENERGIA_CHEIA.png', 'ui_st_empty': 'GUI/inventory/BARRA_ENERGIA_VAZIA.png',
         'ui_slot': 'GUI/inventory/SLOT_HUD_2.png',
+        'gator': 'mobs/Jacaré/sheet_Jacare.png', 'spit': 'mobs/Jacaré/cuspeD.png',
     }
     for name, path in copies.items():
         save(img(path), name)

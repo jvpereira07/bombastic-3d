@@ -15,6 +15,7 @@ import { BOSS, PLAYER, SEWER } from './config';
 import { BombRat } from './entities/BombRat';
 import type { Entity, Hittable } from './entities/Entity';
 import { Explosion } from './entities/Explosion';
+import { Gator } from './entities/Gator';
 import { Pickup } from './entities/Pickup';
 import { Player } from './entities/Player';
 import { Rat } from './entities/Rat';
@@ -24,6 +25,7 @@ import { CreativeMenu } from './ui/CreativeMenu';
 import type { Hud } from './ui/Hud';
 import { Overworld } from './world/Overworld';
 import { Sewer } from './world/Sewer';
+import { TestArena } from './world/TestArena';
 import { World, type WorldMode } from './world/World';
 
 /** Junta mundo, jogador, entidades, chefe, interface e som; é o único que conhece todos. */
@@ -48,7 +50,7 @@ export class Game {
     this.boss = new MrKabumstic(this);
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
     if (mode === 'test') this.setupTest();
-    else { this.spawner.populate(); this.placeItems(); }
+    else { this.spawner.populate(); this.placeItems(); this.placeGators(); }
     this.bindInput();
   }
 
@@ -60,7 +62,7 @@ export class Game {
   dropItem(item: ItemId, x: number, z: number): void { this.spawn(new Pickup(this, item, x, z)); }
 
   hittables(): Hittable[] {
-    const targets: Hittable[] = this.entities.filter((e): e is Rat | BombRat => e instanceof Rat || e instanceof BombRat);
+    const targets: Hittable[] = this.entities.filter((e): e is Rat | BombRat | Gator => e instanceof Rat || e instanceof BombRat || e instanceof Gator);
     targets.push(this.boss);
     return targets;
   }
@@ -78,7 +80,7 @@ export class Game {
 
   /** Remove todos os ratos e paraquedistas (mundo de testes). */
   clearEnemies(): void {
-    for (const e of this.entities) if (e instanceof Rat || e instanceof BombRat || e instanceof Paratrooper) e.alive = false;
+    for (const e of this.entities) if (e instanceof Rat || e instanceof BombRat || e instanceof Paratrooper || e instanceof Gator) e.alive = false;
   }
 
   clearMinions(): void {
@@ -155,10 +157,16 @@ export class Game {
     this.hud.showBanner('Mundo de testes · C abre o menu criativo');
     for (let i = 0; i < 3; i++) this.dropItem('potion', -3 + i * 3, 4);
     this.dropItem('sombrero', 0, -4);
+    this.spawn(new Gator(this, TestArena.RIVER_X, 0));
     this.input.onKey(['KeyR'], () => {
       const a = Math.random() * Math.PI * 2, p = this.player.pos;
       this.spawn(new Rat(this, p.x + Math.cos(a) * 8, p.z + Math.sin(a) * 8));
     });
+  }
+
+  /** Jacarés parados no canal do esgoto, entre as pontes. */
+  private placeGators(): void {
+    for (const z of [-22, -6, 26]) this.spawn(new Gator(this, SEWER.SX, z));
   }
 
   /** Poções pelo mapa, no esgoto e na arena; o chapéu no ponto mais alto perto do início. */

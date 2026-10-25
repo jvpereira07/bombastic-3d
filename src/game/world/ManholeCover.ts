@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { toonMaterial } from '../../engine/toon';
 import { flatDistance } from '../../engine/math';
 
 /** Tampa do esgoto: leva o jogador de `at` para `to` (tecla E). */
@@ -9,7 +10,7 @@ export class ManholeCover {
     groundAt: (x: number, z: number) => number) {
     at.y = groundAt(at.x, at.z) + 0.04;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6),
-      new THREE.MeshLambertMaterial({ map, polygonOffset: true, polygonOffsetFactor: -2 }));
+      toonMaterial({ map, polygonOffset: true, polygonOffsetFactor: -2 }));
     // inclina junto com o terreno
     const n = new THREE.Vector3(groundAt(at.x - 0.5, at.z) - groundAt(at.x + 0.5, at.z), 1,
       groundAt(at.x, at.z - 0.5) - groundAt(at.x, at.z + 0.5)).normalize();

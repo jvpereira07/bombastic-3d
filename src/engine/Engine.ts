@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CelOutline } from './CelOutline';
 
 export interface System { update(dt: number): void }
 
@@ -10,9 +11,11 @@ export class Engine {
   private readonly clock = new THREE.Clock();
   private readonly systems: System[] = [];
   private static readonly MAX_DT = 0.05;
+  private readonly outline: CelOutline;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.outline = new CelOutline(this.renderer, this.camera);
     this.resize();
     addEventListener('resize', () => this.resize());
   }
@@ -25,7 +28,7 @@ export class Engine {
     const frame = (): void => {
       const dt = Math.min(this.clock.getDelta(), Engine.MAX_DT);
       for (const s of this.systems) s.update(dt);
-      this.renderer.render(this.scene, this.camera);
+      this.outline.render(this.scene);
       requestAnimationFrame(frame);
     };
     frame();
@@ -36,5 +39,6 @@ export class Engine {
     this.renderer.setSize(innerWidth, innerHeight, false);
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
+    this.outline.setSize(innerWidth, innerHeight);
   }
 }

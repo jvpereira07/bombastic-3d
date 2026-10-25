@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { toonMaterial } from '../../engine/toon';
 import type { Assets } from '../../engine/Assets';
 import { clamp } from '../../engine/math';
 import { SEWER } from '../config';
@@ -37,8 +38,8 @@ export class Sewer {
 
   constructor(scene: THREE.Scene, assets: Assets, anisotropy: number) {
     const tile = (name: string, rx: number, ry: number): THREE.Texture => assets.tile(name, rx, ry, anisotropy);
-    const lambert = (map: THREE.Texture, side: THREE.Side = THREE.FrontSide): THREE.MeshLambertMaterial =>
-      new THREE.MeshLambertMaterial({ map, side });
+    const lambert = (map: THREE.Texture, side: THREE.Side = THREE.FrontSide): THREE.MeshToonMaterial =>
+      toonMaterial({ map, side });
     const floorPlane = (w: number, h: number, mat: THREE.Material): THREE.Mesh => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.rotation.x = -Math.PI / 2; return m;
     };

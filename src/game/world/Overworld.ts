@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { toonMaterial } from '../../engine/toon';
 import type { Assets } from '../../engine/Assets';
 import { pick, rnd, smoothstep } from '../../engine/math';
 import { OVERWORLD } from '../config';
@@ -55,7 +56,7 @@ export class Overworld {
     for (let i = 0; i < uv.array.length; i++) (uv.array as Float32Array)[i]! *= 40;
     const grass = ProceduralSprites.grassDetail();
     grass.anisotropy = anisotropy;
-    return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: grass, vertexColors: true }));
+    return new THREE.Mesh(geo, toonMaterial({ map: grass, vertexColors: true }));
   }
 
   private scatterScenery(scene: THREE.Scene, assets: Assets, keepClear: THREE.Vector3[]): void {

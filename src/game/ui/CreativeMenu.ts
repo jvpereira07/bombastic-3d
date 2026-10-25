@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { BOSS, ROW } from '../config';
 import { Paratrooper } from '../boss/Paratrooper';
 import { BombRat } from '../entities/BombRat';
+import { Gator } from '../entities/Gator';
 import { Rat } from '../entities/Rat';
 import type { Game } from '../Game';
+import { TestArena } from '../world/TestArena';
 
 /** Quadro de uma folha usado como ícone: [colunas, linhas, coluna, linha]. */
 type Frame = readonly [number, number, number, number];
@@ -19,6 +21,7 @@ export class CreativeMenu {
       { label: 'Rato', icon: 'rat_walk', frame: [5, 4, 0, ROW.FRONT], run: (p) => game.spawn(new Rat(game, p.x, p.z)) },
       { label: 'Rato-bomba', icon: 'bomb', frame: [5, 4, 0, ROW.FRONT], run: (p) => game.spawn(new BombRat(game, p.x, p.z, false)) },
       { label: 'Paraquedista', icon: 'para', frame: [4, 2, 0, 0], run: (p) => game.spawn(new Paratrooper(game, p.x, p.z)) },
+      { label: 'Jacaré (no rio)', icon: 'gator', frame: [20, 6, 0, 2], run: (p) => game.spawn(new Gator(game, TestArena.RIVER_X, p.z)) },
       { label: 'Poção', icon: 'potion', run: (p) => game.dropItem('potion', p.x, p.z) },
       { label: 'Chapéu', icon: 'sombrero', run: (p) => game.dropItem('sombrero', p.x, p.z) },
       { label: 'Explosão', icon: 'boom', frame: [9, 1, 2, 0], run: (p) => game.explode(p.clone().setY(game.world.groundAt(p.x, p.z))) },

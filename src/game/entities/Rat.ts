@@ -33,7 +33,7 @@ export class Rat extends Actor {
 
   takeHit(direction: THREE.Vector3): void {
     this.hp--; this.hurtTimer = 0.15; this.state = 'chase';
-    this.vy = 5; this.vel.copy(direction).multiplyScalar(8);
+    this.vy = 7; this.knockback.copy(direction).setY(0);
     this.game.sfx.hit();
     if (this.hp <= 0) {
       this.dying = 0.4;
@@ -80,6 +80,7 @@ export class Rat extends Actor {
       }
       this.vel.set(this.wanderDir.x, 0, this.wanderDir.y);
     }
+    if (this.knockback.lengthSq() > 4) this.vel.set(0, 0, 0); // voando do golpe, não anda
     this.integrate(dt);
     this.animate(dt);
   }
