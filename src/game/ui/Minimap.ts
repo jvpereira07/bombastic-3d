@@ -1,8 +1,11 @@
 import { isChamber, type DungeonLayout } from '../../engine/procedural/DungeonGenerator';
 import { Tile, isWalkable } from '../../engine/procedural/TileGrid';
+import { OVERWORLD } from '../config';
 import type { Game } from '../Game';
+import { Overworld } from '../world/Overworld';
 
 type Rgb = [number, number, number];
+interface Marker { p: { x: number; y: number }; color: string; r: number }
 
 /** Cor média de uma imagem (reduzida para 8x8 e tirada a média), opcionalmente multiplicada por um tom. */
 function averageColor(img: CanvasImageSource, tint: Rgb = [255, 255, 255]): Rgb {
@@ -21,12 +24,16 @@ function averageColor(img: CanvasImageSource, tint: Rgb = [255, 255, 255]): Rgb 
 }
 
 /**
- * Minimapa do esgoto com névoa: só aparece o que o jogador já viu (um raio em volta dele
- * e a sala inteira ao entrar). Pequeno no canto, seguindo o jogador; N abre o mapa inteiro.
+ * Minimapa: no esgoto, com névoa (só aparece o que o jogador já viu: um raio em volta dele e a sala
+ * inteira ao entrar); no mundo de cima, o mapa todo com relevo e a tampa do esgoto.
+ * Pequeno no canto, seguindo o jogador; N abre o mapa inteiro.
  */
 export class Minimap {
   private static readonly SIGHT = 6;   // células reveladas em volta do jogador
-  private static readonly ZOOM = 4;    // px por célula no mapa do canto
+  private static readonly ZOOM = 4;    // px por célula no mapa do canto (célula do esgoto = 4 m: 1 px por metro)
+  /** Metros por pixel do mapa do mundo de cima. */
+  private static readonly WORLD_M_PER_PX = 2;
+  private overworld: HTMLCanvasElement | null = null;
   private readonly frame = document.createElement('div');
   private readonly canvas = document.createElement('canvas');
   private readonly ctx: CanvasRenderingContext2D;
@@ -63,14 +70,55 @@ export class Minimap {
 
   update(): void {
     const { player, world } = this.game;
-    const inSewer = world.zoneOf(player.pos) === 'sewer' && !player.dead;
-    this.frame.hidden = !inSewer;
-    if (!inSewer) return;
+    const zone = world.zoneOf(player.pos);
+    const show = !player.dead && (zone === 'sewer' || world.mode === 'normal'); // mundo de teste não tem mapa
+    this.frame.hidden = !show;
+    if (!show) return;
+    if (zone === 'sewer') this.updateSewer(); else this.updateOverworld();
+  }
+
+  private updateSewer(): void {
+    const { player, world } = this.game;
     if (world.sewer.layout !== this.layout) this.reset(world.sewer.layout);
     const me = world.sewer.cellOf(player.pos.x, player.pos.z);
     this.reveal(me.x, me.y);
     if (this.dirty) { this.fogCtx.putImageData(this.fogData, 0, 0); this.dirty = false; }
-    this.draw(me);
+    const { width } = this.layout!.grid;
+    const seen = (p: { x: number; y: number }): boolean => this.explored[p.y * width + p.x] === 1;
+    const markers: Marker[] = [];
+    const exit = world.sewer.exitCell;
+    if (seen(exit)) markers.push({ p: exit, color: '#9fd36a', r: 0.9 });
+    const boss = this.layout!.boss, bc = { x: Math.floor(boss.x + boss.w / 2), y: Math.floor(boss.y + boss.h / 2) };
+    if (seen(bc)) markers.push({ p: bc, color: '#e8664a', r: 1.2 });
+    this.draw('Mapa do esgoto', this.fog, me, Minimap.ZOOM, markers);
+  }
+
+  /** Mundo de cima: mapa inteiro já conhecido (desenhado uma vez a partir do relevo). */
+  private updateOverworld(): void {
+    const { player, world } = this.game;
+    this.overworld ??= Minimap.buildOverworld();
+    const toPx = (x: number, z: number): { x: number; y: number } =>
+      ({ x: (x + OVERWORLD.HALF) / Minimap.WORLD_M_PER_PX - 0.5, y: (z + OVERWORLD.HALF) / Minimap.WORLD_M_PER_PX - 0.5 });
+    const lid = world.surfaceLid;
+    this.draw('Mapa do mundo', this.overworld, toPx(player.pos.x, player.pos.z), Minimap.WORLD_M_PER_PX, // 1 px por metro, como no esgoto
+      [{ p: toPx(lid.x, lid.z), color: '#9fd36a', r: 1.5 }]);
+  }
+
+  /** Uma amostra do terreno a cada WORLD_M_PER_PX metros. */
+  private static buildOverworld(): HTMLCanvasElement {
+    const size = Math.ceil((OVERWORLD.HALF * 2) / Minimap.WORLD_M_PER_PX);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+    const img = ctx.createImageData(size, size);
+    for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) {
+      const c = Overworld.mapColor(-OVERWORLD.HALF + (px + 0.5) * Minimap.WORLD_M_PER_PX, -OVERWORLD.HALF + (py + 0.5) * Minimap.WORLD_M_PER_PX);
+      const hex = c.getHex(); // volta para sRGB (THREE.Color guarda em linear)
+      img.data.set([(hex >> 16) & 255, (hex >> 8) & 255, hex & 255, 255], (py * size + px) * 4);
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
   }
 
   /** Masmorra nova: zera a névoa. */
@@ -110,36 +158,35 @@ export class Minimap {
     this.dirty = true;
   }
 
-  private draw(me: { x: number; y: number }): void {
-    const layout = this.layout!, { width, height } = layout.grid;
+  /**
+   * Desenha `source` (1 px = 1 célula do mapa): pequeno, centrado em `me` com `zoom` px por célula;
+   * grande (N), o mapa inteiro parado. Marcadores têm raio em células.
+   */
+  private draw(title: string, source: HTMLCanvasElement, me: { x: number; y: number }, zoomSmall: number, markers: Marker[]): void {
+    const { width, height } = source;
     const big = this.expanded;
     this.frame.classList.toggle('expanded', big);
+    this.frame.dataset.title = `${title} · N fecha`;
     const size = big ? Math.min(innerWidth, innerHeight) - 140 : 168;
-    const zoom = big ? size / Math.max(width, height) : Minimap.ZOOM;
+    const zoom = big ? size / Math.max(width, height) : zoomSmall;
     if (this.canvas.width !== size) { this.canvas.width = this.canvas.height = size; }
     const ctx = this.ctx;
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#2a1206';
     ctx.fillRect(0, 0, size, size);
-    // grande: mapa todo parado; pequeno: centrado no jogador
     const ox = big ? (size - width * zoom) / 2 : size / 2 - (me.x + 0.5) * zoom;
     const oy = big ? (size - height * zoom) / 2 : size / 2 - (me.y + 0.5) * zoom;
-    ctx.drawImage(this.fog, ox, oy, width * zoom, height * zoom);
+    ctx.drawImage(source, ox, oy, width * zoom, height * zoom);
 
     const at = (p: { x: number; y: number }): [number, number] => [ox + (p.x + 0.5) * zoom, oy + (p.y + 0.5) * zoom];
-    const seen = (p: { x: number; y: number }): boolean => this.explored[p.y * width + p.x] === 1;
-    const dot = (p: { x: number; y: number }, color: string, r: number): void => {
-      const [x, y] = at(p);
-      ctx.fillStyle = color; ctx.strokeStyle = '#2a1206'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    };
-    const exit = this.game.world.sewer.exitCell;
-    if (seen(exit)) dot(exit, '#9fd36a', Math.max(4, zoom * 0.9));
-    const boss = layout.boss, bc = { x: Math.floor(boss.x + boss.w / 2), y: Math.floor(boss.y + boss.h / 2) };
-    if (seen(bc)) dot(bc, '#e8664a', Math.max(5, zoom * 1.2));
+    for (const m of markers) {
+      const [x, y] = at(m.p);
+      ctx.fillStyle = m.color; ctx.strokeStyle = '#2a1206'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(4, zoom * m.r), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
 
     // jogador: seta para onde a câmera olha
-    const [px, py] = at(me), yaw = this.game.camera.yaw, s = Math.max(6, zoom * 1.6);
+    const [px, py] = at(me), yaw = this.game.camera.yaw, s = Math.max(6, Math.min(12, zoom * 1.6));
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(-yaw); // câmera olha para (-sen, -cos) no plano; a seta desenhada aponta para cima

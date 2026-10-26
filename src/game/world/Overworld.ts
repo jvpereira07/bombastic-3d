@@ -139,11 +139,37 @@ export class Overworld {
     return y < OVERWORLD.SEA_Y + 0.4 ? 0xd2b87e : steep ? 0xc8ad74 : 0xf3e2a8; // areia molhada perto da água
   }
 
+  /**
+   * Cor do mapa num ponto: a mesma cor de chão do terreno (bioma e encosta), com sombra de relevo
+   * vinda do noroeste; abaixo do nível do mar, a cor do mar escurecendo com a profundidade.
+   */
+  static mapColor(x: number, z: number): THREE.Color {
+    const y = Overworld.height(x, z);
+    if (Overworld.isSea(x, z)) {
+      const depth = Math.min(1, (OVERWORLD.SEA_Y - y) / 4);
+      return new THREE.Color(Overworld.SEA_COLOR).offsetHSL(0, 0, -0.18 * depth);
+    }
+    const n = Overworld.normalAt(x, z);
+    const color = new THREE.Color(Overworld.groundColor(x, y, z, n.y, () => 0.5));
+    const light = n.dot(new THREE.Vector3(-0.5, 0.75, -0.45).normalize());
+    return color.multiplyScalar(0.7 + 0.4 * light);
+  }
+
+  private static readonly SEA_COLOR = 0x3aa6d8;
+  /** Faixa do plano do mar (só no sul): centro e profundidade em z. */
+  private static readonly SEA_Z = OVERWORLD.HALF + 20;
+  private static readonly SEA_DEPTH = 200;
+
+  /** Há água visível aqui: dentro do plano do mar e com o chão abaixo dele. */
+  static isSea(x: number, z: number): boolean {
+    return Math.abs(z - Overworld.SEA_Z) <= Overworld.SEA_DEPTH / 2 && Overworld.height(x, z) < OVERWORLD.SEA_Y;
+  }
+
   private static buildSea(): THREE.Mesh {
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(OVERWORLD.SIZE * 1.6, 200),
-      toonMaterial({ color: 0x3aa6d8, transparent: true, opacity: 0.85 }));
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(OVERWORLD.SIZE * 1.6, Overworld.SEA_DEPTH),
+      toonMaterial({ color: Overworld.SEA_COLOR, transparent: true, opacity: 0.85 }));
     sea.rotation.x = -Math.PI / 2;
-    sea.position.set(0, OVERWORLD.SEA_Y, OVERWORLD.HALF + 20);
+    sea.position.set(0, OVERWORLD.SEA_Y, Overworld.SEA_Z);
     return sea;
   }
 
