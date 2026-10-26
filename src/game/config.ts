@@ -51,7 +51,7 @@ export const RAT = { SIGHT: 20, LOSE: 28, POUNCE_RANGE: 3.5, POUNCE_COOLDOWN: 1.
 export const BOW = {
   DRAW: 0.3, CHARGE: 0.9, RELEASE: 0.22, AIM_SPEED: 0.4, AIM_ZOOM: 0.7,
   SPEED: [24, 44] as [number, number], DAMAGE: [1, 3] as [number, number], KNOCKBACK: [6, 16] as [number, number],
-  LIFE: 1.1, SIZE: 1.4, AIM_RANGE: 60,
+  LIFE: 1.1, SIZE: 1.4, AIM_RANGE: 60, LINGER: 0.7,
 } as const;
 
 export const MARACA = { TIME: 0.42, SPEED: 22, LIFE: 1.1, KNOCKBACK: 16, SIZE: 3.2 } as const;

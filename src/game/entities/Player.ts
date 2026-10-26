@@ -46,6 +46,8 @@ export class Player extends Entity {
   private queued = false;
   /** Puxando a corda do arco (segurando o ataque); `full` = já avisou a carga cheia. */
   private aim: { time: number; full: boolean } | null = null;
+  /** Depois do disparo a câmera fica mais um pouco no ombro, para ver a flecha chegar onde mirou. */
+  private aimLinger = 0;
   /** As duas armas equipadas (tecla 1 e 2); a ativa vai na mão, a outra nas costas. */
   readonly hands: [Weapon | null, Weapon | null] = ['sword', null];
   activeHand: Hand = 0;
@@ -219,8 +221,10 @@ export class Player extends Entity {
     if (this.dead) { this.updateDeath(dt); this.render(false); return; }
 
     if (this.aim) this.updateAim(dt);
-    this.game.camera.aimZoom = this.aim ? BOW.AIM_ZOOM : 1;
-    this.game.camera.shoulder = this.aim ? 1 : 0;
+    this.aimLinger -= dt;
+    const aiming = this.aim !== null || (this.aimLinger > 0 && this.weapon === 'bow');
+    this.game.camera.aimZoom = aiming ? BOW.AIM_ZOOM : 1;
+    this.game.camera.shoulder = aiming ? 1 : 0;
     const moving = this.walk(dt);
     if (this.aim) this.dir.copy(this.aimDir()); // mirando, olha para onde mira mesmo andando
     if (this.knockback) {
@@ -314,6 +318,7 @@ export class Player extends Entity {
     this.game.sfx.bowShot();
     this.aim = null;
     this.attackDuration = this.attackTimer = BOW.RELEASE; this.attackFired = true;
+    this.aimLinger = BOW.LINGER;
   }
 
   private get attackProgress(): number { return 1 - this.attackTimer / this.attackDuration; }
