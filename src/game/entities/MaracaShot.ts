@@ -18,7 +18,7 @@ export class MaracaShot extends Entity {
   private readonly sprite: Billboard;
   private readonly row: number;
 
-  constructor(game: Game, from: THREE.Vector3, private readonly dir: THREE.Vector3, facing: number, combo: number) {
+  constructor(game: Game, from: THREE.Vector3, private readonly dir: THREE.Vector3, facing: number, combo: number, private readonly damage = 1, private readonly power = 1) {
     super(game);
     this.pos = from.clone().addScaledVector(dir, 0.8);
     this.row = combo * 4 + PYGAME_DIR[facing]!;
@@ -34,7 +34,7 @@ export class MaracaShot extends Entity {
     for (const target of this.game.hittables()) {
       if (!target.canBeHit) continue;
       if (flatDistance(target.pos, this.pos) < target.hitRadius && Math.abs(target.pos.y - this.pos.y) < 1.8) {
-        target.takeHit(this.dir.clone().multiplyScalar(MARACA.KNOCKBACK));
+        target.takeHit(this.dir.clone().multiplyScalar(MARACA.KNOCKBACK * this.power), this.damage);
         this.alive = false;
         return;
       }

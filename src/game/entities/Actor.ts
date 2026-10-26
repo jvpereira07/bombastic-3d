@@ -8,6 +8,9 @@ import type { Game } from '../Game';
 import { Entity, type Hittable } from './Entity';
 
 /** Criatura com corpo: posição, velocidade, gravidade, vida, sprite com direção e piscar de dano. */
+/** Duração (s) da paradinha de reação ao notar o jogador. */
+const ACTOR_REACT_TIME = 0.4;
+
 export abstract class Actor extends Entity implements Hittable {
   readonly pos: THREE.Vector3;
   readonly vel = new THREE.Vector3();
@@ -16,6 +19,12 @@ export abstract class Actor extends Entity implements Hittable {
   readonly knockback = new THREE.Vector3();
   readonly look = new THREE.Vector2(0, 1);
   hurtTimer = 0;
+  /** Já notou um jogador (está perseguindo/atacando). */
+  private focused = false;
+  /** Paradinha de reação logo depois de notar o jogador. */
+  private reactTimer = 0;
+  /** Altura do sprite: o "!" aparece logo acima. */
+  private readonly height: number;
   abstract readonly hitRadius: number;
   protected readonly body: Billboard;
   protected readonly sheets: SpriteSheet[];
@@ -34,19 +43,20 @@ export abstract class Actor extends Entity implements Hittable {
   private netHurt = false;
   private placed = false;
 
-  constructor(game: Game, x: number, z: number, public hp: number, sheets: SpriteSheet[], size: number, anchorY: number) {
+  constructor(game: Game, x: number, z: number, public hp: number, sheets: SpriteSheet[], size: number, anchorY: number, height = size) {
     super(game);
+    this.height = height;
     this.pos = new THREE.Vector3(x, game.world.groundAt(x, z), z);
     this.sheets = sheets;
     const first = sheets[0];
     if (!first) throw new Error('Actor sem folha de sprites');
-    this.body = new Billboard(game.scene, first.texture, size, size, anchorY);
+    this.body = new Billboard(game.scene, first.texture, size, height, anchorY);
   }
 
   get position(): THREE.Vector3 { return this.pos; }
 
   get canBeHit(): boolean { return this.alive && this.hp > 0; }
-  abstract takeHit(direction: THREE.Vector3): void;
+  abstract takeHit(direction: THREE.Vector3, damage?: number): void;
 
   get onGround(): boolean { return this.pos.y <= this.game.world.groundAt(this.pos.x, this.pos.z) + 0.01; }
 
@@ -63,6 +73,24 @@ export abstract class Actor extends Entity implements Hittable {
   }
 
   get minionFlag(): boolean { return false; }
+
+  /** Ainda está na paradinha de reação (não anda nem ataca). */
+  protected get reacting(): boolean { return this.reactTimer > 0; }
+
+  /**
+   * Foco: chamado todo frame com "estou atrás de alguém?". Ao ganhar o foco aparece um "!" na cabeça,
+   * o mob dá um pulinho de susto e espera um instante antes de agir. Lacaios do chefe já nascem focados.
+   */
+  protected focus(on: boolean, dt: number): void {
+    this.reactTimer -= dt;
+    if (on && !this.focused && !this.minionFlag) {
+      this.game.emotes.alert(this.pos, this.height * 0.7);
+      this.game.sfx.alert();
+      this.reactTimer = ACTOR_REACT_TIME;
+      if (this.onGround) this.vy = 4;
+    }
+    this.focused = on;
+  }
 
   toNet(): MobState {
     const r = (v: number): number => Math.round(v * 100) / 100;

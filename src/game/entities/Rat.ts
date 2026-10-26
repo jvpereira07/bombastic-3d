@@ -34,9 +34,9 @@ export class Rat extends Actor {
 
   get minionFlag(): boolean { return this.minion; }
 
-  takeHit(direction: THREE.Vector3): void {
+  takeHit(direction: THREE.Vector3, damage = 1): void {
     if (this.forwardHit(direction)) return;
-    this.hp--; this.hurtTimer = 0.15; this.state = 'chase';
+    this.hp -= damage; this.hurtTimer = 0.15; this.state = 'chase';
     this.vy = 7; this.knockback.copy(direction).setY(0);
     this.game.sfx.hit();
     if (this.hp <= 0) {
@@ -64,6 +64,7 @@ export class Rat extends Actor {
     else if (this.state === 'wander' && dist < RAT.SIGHT) this.state = 'chase';
     else if (this.state === 'chase' && dist > RAT.LOSE && !this.minion) this.state = 'wander';
 
+    this.focus(this.state !== 'wander', dt);
     const grounded = this.onGround;
     if (this.state === 'pounce') {
       if (!this.pounceLanded && dist < 1.3 && Math.abs(player.pos.y - this.pos.y) < 1.5 && !player.dead) {
@@ -71,7 +72,8 @@ export class Rat extends Actor {
       }
       if (grounded && this.vy <= 0) { this.state = 'chase'; this.vel.set(0, 0, 0); }
     } else if (this.state === 'chase') {
-      if (dist < RAT.POUNCE_RANGE && this.pounceCooldown <= 0 && grounded) {
+      if (this.reacting) this.vel.set(0, 0, 0);
+      else if (dist < RAT.POUNCE_RANGE && this.pounceCooldown <= 0 && grounded) {
         this.state = 'pounce'; this.pounceTime = 0; this.pounceCooldown = RAT.POUNCE_COOLDOWN; this.pounceLanded = false;
         this.vy = 7; this.vel.copy(toPlayer).multiplyScalar(dist * 2.2 + 2);
         this.game.sfx.squeak();

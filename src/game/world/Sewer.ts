@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Assets } from '../../engine/Assets';
 import { clamp } from '../../engine/math';
-import { generateDungeon, roomCenter, type DungeonLayout, type Room } from '../../engine/procedural/DungeonGenerator';
+import { generateDungeon, isChamber, roomCenter, type DungeonLayout, type Room, type RoomKind } from '../../engine/procedural/DungeonGenerator';
 import { Tile, isWalkable } from '../../engine/procedural/TileGrid';
 import { disposeMeshes, meshTileGrid, type MeshMaterials } from '../../engine/procedural/TileMesher';
 import { seededRng } from '../../engine/rng';
@@ -52,8 +52,8 @@ export class Sewer {
   /** Gera uma masmorra nova e troca a geometria antiga por ela. */
   regenerate(seed: number): void {
     this.layout = generateDungeon(seed, {
-      width: GRID, height: GRID, rooms: 60, roomSize: [4, 7], bossRoom: { w: 10, h: 9 },
-      corridorWidth: 3, bridgeEvery: 5, extraLoops: 2,
+      width: GRID, height: GRID, cell: 12, nodes: 88, spine: [18, 28], bossRoom: { w: 10, h: 9 },
+      bridgeEvery: 5, extraLoops: 10,
     });
     if (this.meshes) disposeMeshes(this.meshes);
     this.meshes = meshTileGrid(this.layout.grid, { tileSize: TILE, wallHeight: WALL_H, waterY: WATER_Y, origin: Sewer.ORIGIN }, this.materials);
@@ -74,6 +74,14 @@ export class Sewer {
   private cellCenter(gx: number, gy: number): THREE.Vector3 {
     return new THREE.Vector3(Sewer.ORIGIN.x + (gx + 0.5) * TILE, 0, Sewer.ORIGIN.y + (gy + 0.5) * TILE);
   }
+
+  /** Célula da grade sob um ponto do mundo (pode cair fora da grade). */
+  cellOf(x: number, z: number): { x: number; y: number } {
+    return { x: Math.floor((x - Sewer.ORIGIN.x) / TILE), y: Math.floor((z - Sewer.ORIGIN.y) / TILE) };
+  }
+
+  /** Célula da tampa de saída (para marcar no minimapa). */
+  get exitCell(): { x: number; y: number } { return this.cellOf(this.exitLid.x, this.exitLid.z); }
 
   tileAt(x: number, z: number): Tile {
     return this.layout.grid.get(Math.floor((x - Sewer.ORIGIN.x) / TILE), Math.floor((z - Sewer.ORIGIN.y) / TILE));
@@ -118,11 +126,19 @@ export class Sewer {
     camera.y = Math.min(WALL_H - 0.6, camera.y);
   }
 
-  /** Ponto de piso numa sala comum (nem entrada nem chefe). */
-  randomFloor(rng: () => number = Math.random): THREE.Vector3 {
-    const rooms = this.layout.rooms.filter((r) => r !== this.layout.boss && r !== this.layout.start);
+  /** Ponto de piso numa sala comum (nem entrada nem chefe); `kinds` restringe o tipo de sala. */
+  randomFloor(rng: () => number = Math.random, kinds?: RoomKind[]): THREE.Vector3 {
+    const common = this.layout.rooms.filter((r) => r !== this.layout.boss && r !== this.layout.start && isChamber(r));
+    const picked = kinds ? common.filter((r) => kinds.includes(r.kind)) : [];
+    const rooms = picked.length ? picked : common;
     const r: Room = rooms[Math.floor(rng() * rooms.length)] ?? this.layout.start;
-    return this.cellCenter(r.x + Math.floor(rng() * r.w), r.y + Math.floor(rng() * r.h));
+    // tenta achar piso seco (salas podem ter pilar ou água)
+    for (let k = 0; k < 12; k++) {
+      const x = r.x + Math.floor(rng() * r.w), y = r.y + Math.floor(rng() * r.h);
+      if (this.layout.grid.get(x, y) === Tile.Floor) return this.cellCenter(x, y);
+    }
+    const c = roomCenter(r);
+    return this.cellCenter(c.x, c.y);
   }
 
   /** Células de canal longe da entrada, para os jacarés. */

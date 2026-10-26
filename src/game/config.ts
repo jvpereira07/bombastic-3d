@@ -2,7 +2,7 @@
 export const SEWER = {
   SX: 1000,         // centro em x
   TILE: 4,          // metros por célula da grade
-  GRID: 40,         // células por lado (160 m)
+  GRID: 132,        // células por lado (528 m): malha de 11x11 nós de 12 células
   WATER_Y: -0.45,
   WALL_H: 12,
 } as const;
@@ -19,9 +19,41 @@ export const PLAYER = {
   SPRITE_SIZE: 2.6, SLASH_KNOCKBACK: 28, DASH_KNOCKBACK: 24,
 } as const;
 
+/**
+ * Combo de 3 golpes: apertar de novo no fim de um golpe (BUFFER, fração da animação) ou logo depois (WINDOW, s)
+ * emenda o próximo; senão volta ao primeiro. Cada etapa tem dano, empurrão (x) e avanço (m/s) próprios.
+ */
+export const COMBO = {
+  BUFFER: 0.45, WINDOW: 0.32, FINISHER_RECOVERY: 0.18,
+  DAMAGE: [1, 1, 2], KNOCKBACK: [0.7, 0.9, 1.5], LUNGE: [4, 4.5, 8], SLASH_SIZE: [2.4, 2.4, 3.2],
+} as const;
+
+/** Mira assistida: sem trava, o golpe puxa para o inimigo mais próximo dentro do cone (graus) e do alcance. */
+export const AIM_ASSIST = { CONE: 55, SWORD_RANGE: 7, MARACA_RANGE: 20, BOW_RANGE: 32 } as const;
+
+/** Cucarachas: bando que dança em roda em volta do jogador, fechando a roda e dando botes. */
+export const CUCARACHA = {
+  HP: 2, DAMAGE: 8, SPEED: 9, SIGHT: 16, LOSE: 26, TROUPE: [4, 6] as [number, number],
+  ORBIT_START: 6, ORBIT_MIN: 2.8, ORBIT_SHRINK: 0.35, SPIN: 1.2,
+  LUNGE_SPEED: 15, LUNGE_TIME: 0.4, LUNGE_COOLDOWN: [2.5, 5] as [number, number],
+  HOP: 4, HOP_EVERY: 60 / 174 * 2, // pulinho a cada meio compasso da música
+} as const;
+
 export const RAT = { SIGHT: 20, LOSE: 28, POUNCE_RANGE: 3.5, POUNCE_COOLDOWN: 1.4, DAMAGE: 12, HP: 3, POTION_DROP: 0.2 } as const;
 
 /** Maraca, arma de segunda mão trocável com a espada: atira ondas sonoras de longe (~24 m). */
+/** Arco: puxa a corda (8 quadros) e solta a flecha perto do fim; sem combo. */
+/**
+ * Arco: segurar o ataque puxa a corda (DRAW s até a flecha encaixar) e carrega a força até CHARGE s;
+ * soltar dispara. Tiro rápido sai fraco; carga cheia dá mais dano, velocidade e empurrão.
+ * Mirando, anda devagar (AIM_SPEED) e a câmera chega perto (AIM_ZOOM).
+ */
+export const BOW = {
+  DRAW: 0.3, CHARGE: 0.9, RELEASE: 0.22, AIM_SPEED: 0.4, AIM_ZOOM: 0.7,
+  SPEED: [24, 44] as [number, number], DAMAGE: [1, 3] as [number, number], KNOCKBACK: [6, 16] as [number, number],
+  LIFE: 1.1, SIZE: 1.4, AIM_RANGE: 60, LINGER: 0.7,
+} as const;
+
 export const MARACA = { TIME: 0.42, SPEED: 22, LIFE: 1.1, KNOCKBACK: 16, SIZE: 3.2 } as const;
 
 export const GATOR = {

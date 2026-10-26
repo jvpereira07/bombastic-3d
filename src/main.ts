@@ -1,3 +1,5 @@
+import '@fontsource/pixelify-sans/400.css';
+import '@fontsource/pixelify-sans/700.css';
 import './style.css';
 import { Assets } from './engine/Assets';
 import { AudioEngine } from './engine/AudioEngine';

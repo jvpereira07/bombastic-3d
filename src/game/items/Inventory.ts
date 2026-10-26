@@ -9,6 +9,11 @@ export class Inventory {
   count(id: ItemId): number { return this.stacks.get(id) ?? 0; }
   has(id: ItemId): boolean { return this.count(id) > 0; }
 
+  /** Itens que o jogador tem, na ordem em que foram pegos. */
+  entries(): { id: ItemId; count: number }[] {
+    return [...this.stacks].filter(([, n]) => n > 0).map(([id, count]) => ({ id, count }));
+  }
+
   canAdd(id: ItemId): boolean { return this.count(id) < ITEMS[id].maxStack; }
 
   add(id: ItemId, amount = 1): boolean {

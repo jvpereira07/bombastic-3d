@@ -1,5 +1,5 @@
 import type { Assets } from '../../engine/Assets';
-import type { Weapon } from '../entities/Player';
+import type { Weapon } from '../items/items';
 import { ITEMS } from '../items/items';
 
 /** Limites do preenchimento nas imagens das barras: início, fim e largura total (px). */
@@ -14,9 +14,12 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 
 export interface HudState {
   hp: number; maxHp: number; stamina: number; maxStamina: number;
-  potions: number; hasHat: boolean; hasMaraca: boolean; weapon: Weapon;
+  potions: number; hasHat: boolean;
+  hands: readonly (Weapon | null)[]; activeHand: number;
   boss: { visible: boolean; hp: number; maxHp: number };
   showManholePrompt: boolean;
+  /** Etapa do combo (0 a 2) ou -1 fora de combo. */
+  comboStage: number;
 }
 
 /** Interface em HTML sobre o canvas, com as imagens do projeto. */
@@ -27,8 +30,7 @@ export class Hud {
   private readonly potionCount = $('#potN');
   private readonly potionSlot = $('#potSlot');
   private readonly hatSlot = $('#hatSlot');
-  private readonly weaponSlot = $('#weaponSlot');
-  private readonly weaponImg = $<HTMLImageElement>('#weaponImg');
+  private readonly handSlots = [$('#hand0'), $('#hand1')];
   private readonly weaponIcons: Record<Weapon, string>;
   private readonly bossPanel = $('#boss');
   private readonly bossFill = $('#boss i');
@@ -36,6 +38,9 @@ export class Hud {
   private readonly prompt = $('#prompt');
   private readonly hint = $('#hint');
   private readonly online = $('#online');
+  private readonly combo = $('#combo');
+  private readonly comboPips = [...this.combo.querySelectorAll('i')];
+  private lastCombo = -1;
   private readonly muteButton = $<HTMLButtonElement>('#mute');
   private bannerTimer = 0;
 
@@ -44,10 +49,9 @@ export class Hud {
     this.hpFill.style.backgroundImage = `url(${assets.url('ui_hp_full')})`;
     $('#stBar').style.backgroundImage = `url(${assets.url('ui_st_empty')})`;
     this.stFill.style.backgroundImage = `url(${assets.url('ui_st_full')})`;
-    for (const slot of document.querySelectorAll<HTMLElement>('.slot')) slot.style.backgroundImage = `url(${assets.url('ui_slot')})`;
     $<HTMLImageElement>('#potImg').src = assets.url(ITEMS.potion.icon);
     $<HTMLImageElement>('#hatImg').src = assets.url(ITEMS.sombrero.icon);
-    this.weaponIcons = { sword: assets.url('sword'), maraca: assets.url(ITEMS.maraca.icon) };
+    this.weaponIcons = { sword: assets.url(ITEMS.sword.icon), maraca: assets.url(ITEMS.maraca.icon), bow: assets.url(ITEMS.bow.icon) };
   }
 
   onMuteClick(handler: () => void): void {
@@ -75,11 +79,23 @@ export class Hud {
     this.potionCount.textContent = String(s.potions);
     this.potionSlot.classList.toggle('off', s.potions === 0);
     this.hatSlot.classList.toggle('off', !s.hasHat);
-    this.weaponSlot.classList.toggle('off', !s.hasMaraca); // sem maraca não há o que trocar
-    if (!this.weaponImg.src.endsWith(this.weaponIcons[s.weapon])) this.weaponImg.src = this.weaponIcons[s.weapon];
+    this.handSlots.forEach((slot, i) => {
+      const weapon = s.hands[i], img = slot.querySelector('img');
+      slot.classList.toggle('off', !weapon);
+      slot.classList.toggle('active', !!weapon && i === s.activeHand);
+      if (img) { img.hidden = !weapon; if (weapon && !img.src.endsWith(this.weaponIcons[weapon])) img.src = this.weaponIcons[weapon]; }
+    });
     this.bossPanel.hidden = !s.boss.visible;
     this.bossFill.style.width = `${(s.boss.hp / s.boss.maxHp) * 100}%`;
     this.prompt.hidden = !s.showManholePrompt;
+    if (s.comboStage !== this.lastCombo) {
+      this.lastCombo = s.comboStage;
+      this.combo.hidden = s.comboStage < 0;
+      this.combo.classList.toggle('finisher', s.comboStage === 2);
+      this.comboPips.forEach((pip, i) => pip.classList.toggle('on', i <= s.comboStage));
+      // reinicia o "pulo" a cada golpe emendado
+      this.combo.classList.remove('bump'); void this.combo.offsetWidth; this.combo.classList.add('bump');
+    }
   }
 
   /** Recorta a imagem "cheia" mantendo a "vazia" por baixo (o ícone da ponta continua visível). */

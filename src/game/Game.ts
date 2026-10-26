@@ -22,6 +22,16 @@ import { Rat } from './entities/Rat';
 import type { ItemId } from './items/items';
 import { RatSpawner } from './RatSpawner';
 import { CreativeMenu } from './ui/CreativeMenu';
+import { Modal } from './ui/components';
+import { Cucaracha } from './entities/Cucaracha';
+import { CucarachaMusic } from './audio/CucarachaMusic';
+import { InventoryMenu } from './ui/InventoryMenu';
+import { PauseMenu } from './ui/PauseMenu';
+import { DamageNumbers } from './ui/DamageNumbers';
+import { LockOn } from './ui/LockOn';
+import { Emotes } from './ui/Emotes';
+import { Minimap } from './ui/Minimap';
+import { BowReticle } from './ui/BowReticle';
 import type { Hud } from './ui/Hud';
 import { NetClient } from '../net/NetClient';
 import { NET } from '../net/protocol';
@@ -50,6 +60,7 @@ export class Game {
   readonly boss: MrKabumstic;
   readonly spawner = new RatSpawner(this);
   private readonly music: BossMusic;
+  private readonly cucarachaMusic: CucarachaMusic;
   private entities: Entity[] = [];
   /** Modo online (opcional): conexão e os outros jogadores. */
   private net: NetClient | null = null;
@@ -57,6 +68,13 @@ export class Game {
   private netTimer = 0;
   /** Mobs compartilhados por dono de shard (só existe online). */
   mobSync: MobSync | null = null;
+  readonly lockOn: LockOn;
+  readonly emotes: Emotes;
+  private readonly minimap: Minimap;
+  private readonly bowReticle: BowReticle;
+  private readonly damageNumbers: DamageNumbers;
+  /** Vida vista no frame anterior, para mostrar o dano (ou cura) de cada criatura. */
+  private readonly lastHp = new WeakMap<object, number>();
 
   constructor(readonly engine: Engine, readonly assets: Assets, readonly input: Input, private readonly audio: AudioEngine, readonly hud: Hud, mode: WorldMode = 'normal') {
     this.scene = engine.scene;
@@ -64,10 +82,16 @@ export class Game {
     this.camera = new ThirdPersonCamera(engine.camera, this.world);
     this.sfx = new Sfx(audio);
     this.music = new BossMusic(audio);
+    this.cucarachaMusic = new CucarachaMusic(audio);
     this.player = new Player(this);
     this.boss = new MrKabumstic(this);
     this.remotes = new RemotePlayers(this.scene, assets);
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
+    this.lockOn = new LockOn(this);
+    this.emotes = new Emotes(engine.camera);
+    this.minimap = new Minimap(this);
+    this.bowReticle = new BowReticle(this);
+    this.damageNumbers = new DamageNumbers(engine.camera);
     if (mode === 'test') this.setupTest();
     else { this.spawner.populate(); this.placeItems(); this.stockSewer(this.world.sewer.layout.seed); }
     this.bindInput();
@@ -130,7 +154,8 @@ export class Game {
   dropItem(item: ItemId, x: number, z: number): void { this.spawn(new Pickup(this, item, x, z)); }
 
   hittables(): Hittable[] {
-    const targets: Hittable[] = this.entities.filter((e): e is Rat | BombRat | Gator => e instanceof Rat || e instanceof BombRat || e instanceof Gator);
+    const targets: Hittable[] = this.entities.filter((e): e is Rat | BombRat | Gator | Cucaracha =>
+      e instanceof Rat || e instanceof BombRat || e instanceof Gator || e instanceof Cucaracha);
     targets.push(this.boss);
     return targets;
   }
@@ -148,7 +173,7 @@ export class Game {
 
   /** Remove todos os ratos e paraquedistas (mundo de testes). */
   clearEnemies(): void {
-    for (const e of this.entities) if (e instanceof Rat || e instanceof BombRat || e instanceof Paratrooper || e instanceof Gator) e.alive = false;
+    for (const e of this.entities) if (e instanceof Rat || e instanceof BombRat || e instanceof Paratrooper || e instanceof Gator || e instanceof Cucaracha) e.alive = false;
   }
 
   clearMinions(): void {
@@ -166,6 +191,7 @@ export class Game {
 
   // ---------- laço ----------
   update(dt: number): void {
+    if (Modal.anyOpen && !this.net) return; // offline, menu aberto pausa o jogo
     this.player.update(dt);
     this.world.shards.update(this.player.pos);
     for (const e of this.entities) {
@@ -186,16 +212,46 @@ export class Game {
     const p = this.player.pos, ground = this.world.groundAt(p.x, p.z);
     this.camera.update(dt, p.clone().setY(ground + (p.y - ground) * 0.5 + 1.8)); // só metade do pulo, para não sacudir
 
+    this.lockOn.update(dt);
+    this.trackDamage();
+    this.damageNumbers.update(dt);
+    this.emotes.update(dt);
+    this.minimap.update();
+    this.bowReticle.update();
+
     this.music.set(this.boss.fighting && !this.player.dead);
     this.music.update();
+    // La Cucaracha toca enquanto algum bando dança em roda por perto (e o chefe não está tocando a dele)
+    const dancing = !this.boss.fighting && this.entities.some((e) => e instanceof Cucaracha && e.dancing && e.pos.distanceTo(p) < 30);
+    this.cucarachaMusic.set(dancing);
+    this.cucarachaMusic.update();
     if (Sewer.contains(p.x) && Math.random() < dt * 0.6) this.sfx.drip();
 
     this.hud.render({
       hp: this.player.hp, maxHp: PLAYER.MAX_HP, stamina: this.player.stamina, maxStamina: PLAYER.MAX_STAMINA,
-      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'), hasMaraca: this.player.inventory.has('maraca'), weapon: this.player.weapon,
+      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'), hands: this.player.hands, activeHand: this.player.activeHand,
       boss: { visible: this.boss.fighting, hp: this.boss.hp, maxHp: BOSS.HP },
       showManholePrompt: !this.player.dead && this.world.manholeNear(p) !== undefined,
+      comboStage: this.player.comboStage,
     });
+  }
+
+  /** Compara a vida de cada criatura com o frame anterior e solta o número do que mudou. */
+  private trackDamage(): void {
+    const creatures: { key: object; hp: number; at: THREE.Vector3; isPlayer: boolean }[] = [
+      { key: this.player, hp: this.player.hp, at: this.player.pos, isPlayer: true },
+      { key: this.boss, hp: this.boss.hp, at: this.boss.pos, isPlayer: false },
+      ...this.actors().map((a) => ({ key: a, hp: a.hp, at: a.pos, isPlayer: false })),
+    ];
+    for (const c of creatures) {
+      const before = this.lastHp.get(c.key);
+      this.lastHp.set(c.key, c.hp);
+      if (before === undefined || before === c.hp) continue;
+      const head = c.at.clone().setY(c.at.y + (c.key === this.boss ? 3 : 1.6));
+      const delta = Math.round(Math.abs(c.hp - before));
+      if (c.hp < before) this.damageNumbers.spawn(head, delta, c.isPlayer ? 'player' : 'enemy');
+      else if (c.isPlayer && !this.player.dead && before > 0) this.damageNumbers.spawn(head, delta, 'heal');
+    }
   }
 
   private removeDead(): void {
@@ -245,16 +301,28 @@ export class Game {
     input.onLook((dx, dy) => this.camera.rotate(dx, dy));
     input.onZoom((d) => this.camera.zoom(d));
     input.onLockedClick(() => player.attack());
-    input.onLockChange((locked) => this.hud.setHintVisible(!locked));
+    input.onLockChange((locked) => this.hud.setHintVisible(!locked && !Modal.anyOpen));
     input.onKey(['Space'], () => player.jump());
     input.onKey(['KeyF', 'KeyJ'], () => player.attack());
-    input.onKey(['KeyQ', 'Digit1'], () => player.drinkPotion());
+    input.onKey(['KeyQ'], () => player.drinkPotion());
+    input.onKey(['Digit1'], () => player.selectHand(0));
+    input.onKey(['Digit2'], () => player.selectHand(1));
     input.onKey(['ShiftLeft', 'ShiftRight'], () => player.dash());
     input.onKey(['KeyG'], () => player.switchWeapon());
     input.onKey(['KeyE'], () => this.useManhole());
-    const toggleMute = (): void => this.hud.setMuted(this.audio.toggleMute());
+    input.onKey(['KeyT'], () => this.lockOn.toggle());
+    input.onAltClick(() => this.lockOn.toggle());
+    const toggleMute = (): boolean => { const muted = this.audio.toggleMute(); this.hud.setMuted(muted); return muted; };
     input.onKey(['KeyM'], toggleMute);
     this.hud.onMuteClick(toggleMute);
+
+    input.blocked = () => Modal.anyOpen;
+    const inventory = new InventoryMenu(player, this.assets);
+    const pause = new PauseMenu({ inventory: () => inventory.toggle(true), toggleMute, muted: () => this.audio.isMuted });
+    input.onKey(['Tab', 'KeyI'], () => { if (!pause.open) inventory.toggle(); }, true);
+    input.onKey(['KeyP'], () => (Modal.anyOpen && !pause.open ? Modal.closeAll() : pause.toggle()), true);
+    input.onKey(['Escape'], () => (Modal.anyOpen ? Modal.closeAll() : pause.toggle(true)), true);
+    Modal.onChange((open) => this.hud.setHintVisible(!open && !input.locked));
   }
 
   /** Mundo de testes: sem ratos, itens ao lado do início; R cria um rato perto do jogador, C abre o menu criativo. */
@@ -264,6 +332,7 @@ export class Game {
     for (let i = 0; i < 3; i++) this.dropItem('potion', -3 + i * 3, 4);
     this.dropItem('sombrero', 0, -4);
     this.dropItem('maraca', 3, -4);
+    this.dropItem('bow', 6, -4);
     this.spawn(new Gator(this, TestArena.RIVER_X, 0));
     this.input.onKey(['KeyR'], () => {
       const a = Math.random() * Math.PI * 2, p = this.player.pos;
@@ -273,13 +342,13 @@ export class Game {
 
   /** Jacarés nos canais e poções nas salas da masmorra atual. */
   private stockSewer(seed: number): void {
-    for (const p of this.world.sewer.waterSpots(4, seed)) this.spawn(new Gator(this, p.x, p.z));
+    for (const p of this.world.sewer.waterSpots(12, seed)) this.spawn(new Gator(this, p.x, p.z));
     this.dropSewerPotions();
   }
 
   /** Poções são locais (cada jogador pega as suas), mesmo online. */
   private dropSewerPotions(): void {
-    for (let i = 0; i < 5; i++) { const p = this.world.sewer.randomFloor(); this.dropItem('potion', p.x, p.z); }
+    for (let i = 0; i < 16; i++) { const p = this.world.sewer.randomFloor(Math.random, ['beco']); this.dropItem('potion', p.x, p.z); }
   }
 
   /** Poções pelo mapa; o chapéu no ponto mais alto perto do início. */
@@ -292,5 +361,6 @@ export class Game {
     }
     this.dropItem('sombrero', best.x, best.z);
     this.dropItem('maraca', -6, 5);
+    this.dropItem('bow', 7, 6);
   }
 }

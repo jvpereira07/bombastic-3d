@@ -4,28 +4,32 @@ import { Paratrooper } from '../boss/Paratrooper';
 import { BombRat } from '../entities/BombRat';
 import { Gator } from '../entities/Gator';
 import { Rat } from '../entities/Rat';
+import { Cucaracha } from '../entities/Cucaracha';
 import type { Game } from '../Game';
 import { TestArena } from '../world/TestArena';
+import { button, h, icon, Modal, tabs, type Frame } from './components';
 
-/** Quadro de uma folha usado como ícone: [colunas, linhas, coluna, linha]. */
-type Frame = readonly [number, number, number, number];
 interface Entry { label: string; icon?: string; frame?: Frame; run(at: THREE.Vector3): void }
 
 /** Menu do mundo de testes (tecla C): invoca coisas à frente do jogador e atalhos de depuração. */
-export class CreativeMenu {
+export class CreativeMenu extends Modal {
   private static readonly SPAWN_DISTANCE = 6;
-  private readonly root = document.createElement('div');
 
   constructor(private readonly game: Game) {
-    const spawn: Entry[] = [
+    super('Menu criativo', 'Clique para invocar à frente do jogador · C ou Esc fecha');
+    const mobs: Entry[] = [
       { label: 'Rato', icon: 'rat_walk', frame: [5, 4, 0, ROW.FRONT], run: (p) => game.spawn(new Rat(game, p.x, p.z)) },
       { label: 'Rato-bomba', icon: 'bomb', frame: [5, 4, 0, ROW.FRONT], run: (p) => game.spawn(new BombRat(game, p.x, p.z, false)) },
       { label: 'Paraquedista', icon: 'para', frame: [4, 2, 0, 0], run: (p) => game.spawn(new Paratrooper(game, p.x, p.z)) },
       { label: 'Jacaré (no rio)', icon: 'gator', frame: [20, 6, 0, 2], run: (p) => game.spawn(new Gator(game, TestArena.RIVER_X, p.z)) },
+      { label: 'Bando de cucarachas', icon: 'barata', frame: [8, 2, 0, 0], run: (p) => { for (let i = 0; i < 5; i++) game.spawn(new Cucaracha(game, p.x + Math.cos(i * 1.26) * 1.2, p.z + Math.sin(i * 1.26) * 1.2, i, 5)); } },
+      { label: 'Explosão', icon: 'boom', frame: [9, 1, 2, 0], run: (p) => game.explode(p.clone().setY(game.world.groundAt(p.x, p.z))) },
+    ];
+    const items: Entry[] = [
       { label: 'Poção', icon: 'potion', run: (p) => game.dropItem('potion', p.x, p.z) },
       { label: 'Maraca', icon: 'maraca', run: (p) => game.dropItem('maraca', p.x, p.z) },
+      { label: 'Arco', icon: 'bow', run: (p) => game.dropItem('bow', p.x, p.z) },
       { label: 'Chapéu', icon: 'sombrero', run: (p) => game.dropItem('sombrero', p.x, p.z) },
-      { label: 'Explosão', icon: 'boom', frame: [9, 1, 2, 0], run: (p) => game.explode(p.clone().setY(game.world.groundAt(p.x, p.z))) },
     ];
     const actions: Entry[] = [
       { label: 'Curar', run: () => game.player.heal(Infinity) },
@@ -34,44 +38,20 @@ export class CreativeMenu {
       { label: 'Ir ao esgoto (novo)', run: () => game.enterSewer() },
       { label: 'Ir à arena do chefe', run: () => { const c = game.world.sewer.arena.center; this.teleport(c.clone().setZ(game.world.sewer.arena.minZ + 2)); } },
     ];
-
-    this.root.id = 'creative';
-    this.root.hidden = true;
-    this.root.innerHTML = '<h2>Menu criativo</h2><p>Clique para invocar à frente do jogador · C ou Esc fecha</p>';
-    this.root.append(this.grid(spawn, 'spawn'), this.grid(actions, 'actions'));
-    document.body.append(this.root);
-
-    game.input.onKey(['KeyC'], () => this.toggle());
-    game.input.onKey(['Escape'], () => this.toggle(false));
+    this.body.append(tabs([
+      { label: 'Inimigos', content: this.grid(mobs, 'tiles') },
+      { label: 'Itens', content: this.grid(items, 'tiles') },
+      { label: 'Ações', content: this.grid(actions, 'list') },
+    ]));
+    game.input.onKey(['KeyC'], () => { if (this.open || !Modal.anyOpen) this.toggle(); }, true);
   }
 
-  get open(): boolean { return !this.root.hidden; }
-
-  toggle(open = !this.open): void {
-    this.root.hidden = !open;
-    if (open && document.pointerLockElement) document.exitPointerLock();
-  }
-
-  private grid(entries: Entry[], kind: string): HTMLElement {
-    const grid = document.createElement('div');
-    grid.className = `grid ${kind}`;
-    for (const entry of entries) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      if (entry.icon) {
-        const icon = document.createElement('span');
-        icon.className = 'icon';
-        icon.style.backgroundImage = `url(${this.game.assets.url(entry.icon)})`;
-        const [cols, rows, col, row] = entry.frame ?? [1, 1, 0, 0];
-        icon.style.backgroundSize = `${cols * 100}% ${rows * 100}%`;
-        icon.style.backgroundPosition = `${cols > 1 ? (col / (cols - 1)) * 100 : 0}% ${rows > 1 ? (row / (rows - 1)) * 100 : 0}%`;
-        button.append(icon);
-      }
-      button.append(entry.label);
-      button.addEventListener('click', () => entry.run(this.spawnPoint()));
-      grid.append(button);
-    }
-    return grid;
+  private grid(entries: Entry[], kind: 'tiles' | 'list'): HTMLElement {
+    return h('div', { className: `ui-grid ${kind}` }, ...entries.map((e) => button(e.label, {
+      className: kind === 'tiles' ? 'tile' : '',
+      icon: e.icon ? icon(this.game.assets.url(e.icon), e.frame) : undefined,
+      onClick: () => e.run(this.spawnPoint()),
+    })));
   }
 
   /** Ponto no chão à frente da câmera. */

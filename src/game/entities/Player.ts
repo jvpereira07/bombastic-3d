@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { facingRow } from '../../engine/math';
-import { MARACA, PHYSICS, PLAYER } from '../config';
+import { isWalkable } from '../../engine/procedural/TileGrid';
+import { AIM_ASSIST, BOW, COMBO, MARACA, PHYSICS, PLAYER } from '../config';
 import type { Game } from '../Game';
 import { Inventory } from '../items/Inventory';
-import { ITEMS, type ItemId } from '../items/items';
+import { ITEMS, type ItemId, type Weapon } from '../items/items';
+import { Arrow } from './Arrow';
 import { Entity, type Hittable } from './Entity';
 import { MaracaShot } from './MaracaShot';
 import type { PlayerState, PoseSheet } from '../../net/protocol';
@@ -14,7 +16,10 @@ import { SlashProjectile } from './SlashProjectile';
 /** Ordem das linhas do pygame (direita, esquerda, baixo, cima) para as do jogo (costas, esquerda, frente, direita). */
 const PYGAME_DIR = [3, 1, 2, 0] as const;
 
-export type Weapon = 'sword' | 'maraca';
+export type { Weapon } from '../items/items';
+
+/** Índice da mão: 0 = tecla 1, 1 = tecla 2. */
+export type Hand = 0 | 1;
 
 /** Folhas do corpo e a camada de chapéu correspondente (mesma grade, desenhada por cima). */
 interface Layered { body: SpriteSheet; hat: SpriteSheet }
@@ -35,8 +40,17 @@ export class Player extends Entity {
   private attackTimer = 0;
   private attackFired = false;
   private combo = 0;
-  /** Arma na mão; o ataque (clique/F) usa ela. G troca quando já tem a maraca. */
-  weapon: Weapon = 'sword';
+  /** Tempo que ainda dá para emendar o próximo golpe depois que o atual acabou. */
+  private comboWindow = 0;
+  /** Apertou ataque no fim do golpe: o próximo sai assim que este acabar. */
+  private queued = false;
+  /** Puxando a corda do arco (segurando o ataque); `full` = já avisou a carga cheia. */
+  private aim: { time: number; full: boolean } | null = null;
+  /** Depois do disparo a câmera fica mais um pouco no ombro, para ver a flecha chegar onde mirou. */
+  private aimLinger = 0;
+  /** As duas armas equipadas (tecla 1 e 2); a ativa vai na mão, a outra nas costas. */
+  readonly hands: [Weapon | null, Weapon | null] = ['sword', null];
+  activeHand: Hand = 0;
   private attackDuration: number = PLAYER.ATTACK_TIME;
   private readonly dashHit = new Set<Hittable>();
   private dashTimer = 0;
@@ -46,6 +60,10 @@ export class Player extends Entity {
   private readonly move: Layered;
   private readonly attackSheets: Layered;
   private readonly maracaSheets: Layered;
+  private readonly bowSheets: Layered;
+  /** Arma reserva desenhada nas costas. */
+  private readonly back: Billboard;
+  private readonly backIcons: Record<Weapon, THREE.Texture>;
   private readonly dashSheets: Layered;
   private readonly body: Billboard;
   private readonly hat: Billboard;
@@ -59,6 +77,7 @@ export class Player extends Entity {
     this.move = layered('player_move', 'hat_move', 7);          // col 0 parado, 1-6 andando
     this.attackSheets = layered('player_atk', 'hat_atk', 18);   // combo de 3 golpes x 6 quadros
     this.dashSheets = layered('player_dash', 'hat_dash', 8);
+    this.bowSheets = layered('player_bow', 'hat_bow', 8);          // corpo + arco (pygame, linhas 40-43)
     this.maracaSheets = { body: new SpriteSheet(Player.maracaAttackTexture(a), 18, 4), hat: new SpriteSheet(a.texture('hat_atk'), 18, 4) };
     this.body = new Billboard(game.scene, this.move.body.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
     this.hat = new Billboard(game.scene, this.move.hat.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
@@ -66,12 +85,22 @@ export class Player extends Entity {
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
     this.shadow.rotation.x = -Math.PI / 2;
     game.scene.add(this.shadow);
+    this.backIcons = { sword: a.texture('sword'), maraca: a.texture('maraca'), bow: a.texture('bow') };
+    for (const t of Object.values(this.backIcons)) t.magFilter = t.minFilter = THREE.NearestFilter;
+    this.back = new Billboard(game.scene, this.backIcons.sword, 1.25, 1.25, 0.5);
+    this.inventory.add('sword');
     this.inventory.add('potion');
   }
 
   get dead(): boolean { return this.deadTimer > 0; }
   get dashing(): boolean { return this.dashTimer > 0; }
-  get attacking(): boolean { return this.attackTimer > 0; }
+  get attacking(): boolean { return this.attackTimer > 0 || this.aim !== null; }
+  /** Mirando com o arco: força da puxada (0..1) ou null. */
+  get bowCharge(): number | null {
+    return this.aim ? Math.min(1, Math.max(0, (this.aim.time - BOW.DRAW) / BOW.CHARGE)) : null;
+  }
+  /** Arma na mão agora (a ativa; se a mão estiver vazia, a outra). */
+  get weapon(): Weapon { return this.hands[this.activeHand] ?? this.hands[this.activeHand === 0 ? 1 : 0] ?? 'sword'; }
   private get row(): number { return facingRow(this.dir.x, this.dir.y, this.game.camera.yaw); }
 
   // ---------- ações ----------
@@ -81,30 +110,64 @@ export class Player extends Entity {
     this.game.sfx.jump();
   }
 
+  /** Etapa do combo em andamento (0 a 2), ou -1 fora de combo; a HUD mostra. */
+  get comboStage(): number { return this.attacking || this.comboWindow > 0 ? this.combo : -1; }
+
   attack(): void {
-    if (this.attacking || this.dead || this.dashing) return;
-    this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : PLAYER.ATTACK_TIME;
-    this.attackTimer = this.attackDuration; this.attackFired = false;
-    this.combo = (this.combo + 1) % 3;
-    if (this.weapon === 'maraca') {
-      // de longe mira para onde a câmera olha
-      const yaw = this.game.camera.yaw;
-      this.dir.set(-Math.sin(yaw), -Math.cos(yaw));
-      this.game.sfx.maraca();
-    } else this.game.sfx.slash();
+    if (this.dead || this.dashing) return;
+    if (this.weapon === 'bow') {
+      // arco: começa a puxar; enquanto segurar, mira e carrega; ao soltar, dispara (ver updateAim)
+      if (!this.attacking) { this.aim = { time: 0, full: false }; this.game.sfx.bowDraw(); }
+      return;
+    }
+    if (this.attacking) {
+      // no fim do golpe o clique fica guardado e emenda o próximo; antes disso é ignorado (sem spam)
+      if (this.attackProgress >= COMBO.BUFFER && this.combo < 2) this.queued = true;
+      return;
+    }
+    this.startAttack(this.comboWindow > 0 ? (this.combo + 1) % 3 : 0);
   }
 
-  /** Troca entre espada e maraca (a maraca vai na segunda mão; precisa tê-la). */
-  switchWeapon(): void {
-    if (!this.inventory.hasAbility('maraca') || this.attacking || this.dead) return;
-    this.weapon = this.weapon === 'sword' ? 'maraca' : 'sword';
+  private startAttack(stage: number): void {
+    this.combo = stage; this.queued = false; this.comboWindow = 0;
+    this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : PLAYER.ATTACK_TIME;
+    if (stage === 2) this.attackDuration += COMBO.FINISHER_RECOVERY; // golpe final pesa mais
+    this.attackTimer = this.attackDuration; this.attackFired = false;
+    let wanted = this.dir.clone();
+    if (this.weapon !== 'sword') {
+      // de longe mira para onde a câmera olha
+      const yaw = this.game.camera.yaw;
+      wanted = new THREE.Vector2(-Math.sin(yaw), -Math.cos(yaw));
+      if (this.weapon === 'maraca') this.game.sfx.maraca(); else this.game.sfx.bowDraw();
+    } else this.game.sfx.slash();
+    const range = this.weapon === 'maraca' ? AIM_ASSIST.MARACA_RANGE : this.weapon === 'bow' ? AIM_ASSIST.BOW_RANGE : AIM_ASSIST.SWORD_RANGE;
+    this.dir.copy(this.game.lockOn.assist(this.pos, wanted, range));
+  }
+
+  /** Passa para a arma da mão `hand` (teclas 1 e 2); a outra vai para as costas. */
+  selectHand(hand: Hand): void {
+    if (hand === this.activeHand || !this.hands[hand] || this.attacking || this.dead) return;
+    this.activeHand = hand; this.comboWindow = 0;
+    this.game.sfx.pickup();
+  }
+
+  /** G: alterna entre as duas mãos. */
+  switchWeapon(): void { this.selectHand(this.activeHand === 0 ? 1 : 0); }
+
+  /** Põe uma arma que o jogador tem numa das mãos; se ela já estava na outra, as duas trocam de lugar. */
+  equip(weapon: Weapon, hand: Hand): void {
+    if (this.attacking) return;
+    const other: Hand = hand === 0 ? 1 : 0;
+    if (this.hands[other] === weapon) this.hands[other] = this.hands[hand];
+    this.hands[hand] = weapon;
+    if (!this.hands[this.activeHand]) this.activeHand = hand;
     this.game.sfx.pickup();
   }
 
   dash(): void {
     if (!this.inventory.hasAbility('dash') || this.dead || this.dashing || this.dashCooldown > 0 || this.stamina < PLAYER.DASH_COST) return;
     this.stamina -= PLAYER.DASH_COST;
-    this.dashTimer = PLAYER.DASH_TIME; this.dashCooldown = PLAYER.DASH_COOLDOWN; this.attackTimer = 0;
+    this.dashTimer = PLAYER.DASH_TIME; this.dashCooldown = PLAYER.DASH_COOLDOWN; this.attackTimer = 0; this.aim = null;
     this.dashHit.clear();
     this.game.sfx.dash();
   }
@@ -125,7 +188,12 @@ export class Player extends Entity {
     const def = ITEMS[item];
     if (def.kind === 'equipment') {
       this.game.sfx.hat();
-      this.game.hud.showBanner(def.grants.includes('maraca') ? `${def.name}! G troca entre espada e maraca (ataque de longe)` : `${def.name}! Shift para dar dash`);
+      if (def.weapon) {
+        // arma nova vai para uma mão vazia, se houver
+        const free = this.hands.indexOf(null);
+        if (free >= 0) { this.hands[free] = def.weapon; this.game.hud.showBanner(`${def.name}! Aperte ${free + 1} para empunhar`); }
+        else this.game.hud.showBanner(`${def.name}! Equipe pelo inventário (Tab)`);
+      } else this.game.hud.showBanner(`${def.name}! Shift para dar dash`);
     }
     else this.game.sfx.pickup();
     return true;
@@ -148,11 +216,17 @@ export class Player extends Entity {
 
   // ---------- simulação ----------
   update(dt: number): void {
-    this.hurtTimer -= dt; this.dashTimer -= dt; this.dashCooldown -= dt;
+    this.hurtTimer -= dt; this.dashTimer -= dt; this.dashCooldown -= dt; this.comboWindow -= dt;
     this.stamina = Math.min(PLAYER.MAX_STAMINA, this.stamina + PLAYER.STAMINA_REGEN * dt);
     if (this.dead) { this.updateDeath(dt); this.render(false); return; }
 
+    if (this.aim) this.updateAim(dt);
+    this.aimLinger -= dt;
+    const aiming = this.aim !== null || (this.aimLinger > 0 && this.weapon === 'bow');
+    this.game.camera.aimZoom = aiming ? BOW.AIM_ZOOM : 1;
+    this.game.camera.shoulder = aiming ? 1 : 0;
     const moving = this.walk(dt);
+    if (this.aim) this.dir.copy(this.aimDir()); // mirando, olha para onde mira mesmo andando
     if (this.knockback) {
       this.pos.addScaledVector(this.knockback, dt);
       this.knockback.multiplyScalar(Math.exp(-dt * 6));
@@ -161,17 +235,90 @@ export class Player extends Entity {
     this.fall(dt);
     this.walkAnim = moving && this.grounded ? this.walkAnim + dt * 12 : 0;
 
-    if (this.attacking) {
-      this.attackTimer -= dt;
-      if (!this.attackFired && this.attackProgress >= 1 / 6) {
-        this.attackFired = true;
-        const dir = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
-        if (this.weapon === 'maraca') this.game.spawn(new MaracaShot(this.game, this.pos, dir, this.row, this.combo));
-        else this.game.spawn(new SlashProjectile(this.game, this.pos, dir, this.row));
-      }
-    }
+    if (this.attacking) this.updateAttack(dt);
     if (this.dashing) this.dashThrough();
     this.render(moving);
+  }
+
+  private updateAttack(dt: number): void {
+    this.attackTimer -= dt;
+    const stage = this.combo, progress = this.attackProgress;
+    // avanço no começo do golpe da espada (o final avança mais)
+    if (this.weapon === 'bow') { if (this.attackTimer <= 0) this.attackTimer = 0; return; } // só a soltura da corda
+    if (this.weapon === 'sword' && progress < 0.5) {
+      const lunge = COMBO.LUNGE[stage]! * (1 - progress * 2) * dt;
+      this.pos.x += this.dir.x * lunge; this.pos.z += this.dir.y * lunge;
+    }
+    if (!this.attackFired && progress >= 1 / 6) {
+      this.attackFired = true;
+      const dir = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
+      const damage = COMBO.DAMAGE[stage]!, power = COMBO.KNOCKBACK[stage]!;
+      if (this.weapon === 'maraca') this.game.spawn(new MaracaShot(this.game, this.pos, dir, this.row, stage, damage, power));
+      else this.game.spawn(new SlashProjectile(this.game, this.pos, dir, this.row, damage, power, COMBO.SLASH_SIZE[stage]));
+      if (stage === 2) this.game.sfx.hit();
+    }
+    if (this.attackTimer > 0) return;
+    this.attackTimer = 0;
+    if (this.queued) this.startAttack(stage + 1);
+    else this.comboWindow = stage < 2 ? COMBO.WINDOW : 0;
+  }
+
+  /** Altura de onde a flecha sai (peito). */
+  private get chest(): THREE.Vector3 { return this.pos.clone().setY(this.pos.y + 1.1); }
+
+  /**
+   * Ponto mirado: o alvo travado, ou o que o centro da tela enxerga — o raio da câmera bate num
+   * inimigo, no chão ou numa parede; sem nada no caminho, um ponto bem longe na mesma linha.
+   */
+  aimPoint(): THREE.Vector3 {
+    const target = this.game.lockOn.target;
+    if (target) return target.pos.clone().setY(target.pos.y + 1);
+    const cam = this.game.engine.camera, origin = cam.position.clone();
+    const ray = cam.getWorldDirection(new THREE.Vector3());
+    const start = Math.max(0, this.pos.clone().sub(origin).dot(ray)); // ignora o que está entre a câmera e o jogador
+    let best = BOW.AIM_RANGE + start;
+    for (const t of this.game.hittables()) {
+      if (!t.canBeHit) continue;
+      const c = t.pos.clone().setY(t.pos.y + 1), along = c.clone().sub(origin).dot(ray);
+      if (along < start || along > best) continue;
+      if (origin.clone().addScaledVector(ray, along).distanceTo(c) < t.hitRadius) best = along;
+    }
+    const { world } = this.game, p = new THREE.Vector3();
+    for (let s = start; s < best; s += 0.5) {
+      p.copy(origin).addScaledVector(ray, s);
+      const wall = world.zoneOf(p) === 'sewer' && !isWalkable(world.sewer.tileAt(p.x, p.z));
+      if (p.y <= world.groundAt(p.x, p.z) || wall) return p;
+    }
+    return origin.addScaledVector(ray, best);
+  }
+
+  /** Direção 3D do peito até o ponto mirado. */
+  private aimDir3(): THREE.Vector3 {
+    const d = this.aimPoint().sub(this.chest);
+    return d.lengthSq() > 1e-4 ? d.normalize() : new THREE.Vector3(this.dir.x, 0, this.dir.y);
+  }
+
+  /** Só o plano (para onde o corpo vira). */
+  private aimDir(): THREE.Vector2 {
+    const d = this.aimDir3(), flat = new THREE.Vector2(d.x, d.z);
+    return flat.lengthSq() > 1e-4 ? flat.normalize() : this.dir.clone();
+  }
+
+  /** Corda puxada: carrega enquanto segura; soltando (depois de encaixar a flecha), dispara. */
+  private updateAim(dt: number): void {
+    const aim = this.aim!;
+    aim.time += dt;
+    if (this.bowCharge === 1 && !aim.full) { aim.full = true; this.game.sfx.bowFull(); }
+    if (this.game.input.primaryHeld() || aim.time < BOW.DRAW) return; // toque rápido ainda termina de puxar
+    const charge = this.bowCharge ?? 0;
+    // vai exatamente para onde a mira aponta (com trava, no alvo); a mira assistida não mexe no arco
+    const dir = this.aimDir3();
+    this.dir.copy(this.aimDir());
+    this.game.spawn(new Arrow(this.game, this.chest, dir, charge));
+    this.game.sfx.bowShot();
+    this.aim = null;
+    this.attackDuration = this.attackTimer = BOW.RELEASE; this.attackFired = true;
+    this.aimLinger = BOW.LINGER;
   }
 
   private get attackProgress(): number { return 1 - this.attackTimer / this.attackDuration; }
@@ -188,6 +335,36 @@ export class Player extends Entity {
       if (side.dot(offset) < 0) side.negate();
       target.takeHit(dir.add(side).normalize().multiplyScalar(PLAYER.DASH_KNOCKBACK));
     }
+  }
+
+  /**
+   * Arma reserva presa nas costas, seguindo para onde o jogador olha (não a câmera):
+   * some atrás dele quando está de frente e aparece por cima quando está de costas.
+   */
+  private renderBack(row: number, tint: number): void {
+    const reserve = this.hands[this.activeHand === 0 ? 1 : 0];
+    this.back.visible = !!reserve && reserve !== this.weapon && !this.dashing;
+    if (!reserve) return;
+    this.back.setMap(this.backIcons[reserve]);
+    this.back.tint(tint);
+    const facing = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
+    const cam = this.game.engine.camera, eye = cam.position;
+    const forward = cam.getWorldDirection(new THREE.Vector3());
+    // o corpo é um sprite virado para a câmera: a altura das costas se mede no "para cima" da câmera,
+    // e o lado das costas só no "para a direita" (senão, com a câmera alta, a arma escorrega para a cintura)
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+    const want = this.pos.clone().addScaledVector(up, 1.2).addScaledVector(right, -facing.dot(right) * 0.3);
+    // camada: atrás do corpo, a não ser que ele esteja claramente de costas para a câmera
+    const toCamera = eye.clone().sub(this.pos).setY(0).normalize();
+    const inFront = facing.dot(toCamera) < -0.3;
+    // a profundidade fica presa à do corpo (±0,3), qualquer que seja a altura da câmera; desliza pelo raio
+    // de visão para não mudar onde aparece na tela
+    const bodyDepth = this.pos.clone().sub(eye).dot(forward), depth = want.clone().sub(eye).dot(forward);
+    const target = bodyDepth + (inFront ? -0.3 : 0.3);
+    this.back.position.copy(eye).addScaledVector(want.sub(eye), depth > 0.1 ? target / depth : 1);
+    // inclinação de bainha, espelhada conforme o lado que a câmera vê
+    this.back.material.rotation = row === 1 ? 0.45 : row === 3 ? -0.45 : row === 0 ? 0.35 : -0.35;
   }
 
   /** Ataque com a maraca: corpo do pygame sem a espada + camada da maraca, na ordem de linhas do jogo. */
@@ -218,11 +395,11 @@ export class Player extends Entity {
       this.pos.z += this.dir.y * PLAYER.SPEED * PLAYER.DASH_SPEED * dt;
       return false;
     }
-    if (this.attacking) return false;
+    if (this.attacking && !this.aim) return false;
     let { x, z } = this.game.input.axis();
     if (!x && !z) return false;
     const len = Math.hypot(x, z); x /= len; z /= len;
-    const speed = PLAYER.SPEED * (this.game.world.isWading(this.pos) ? 0.5 : 1); // água poluída deixa lento
+    const speed = PLAYER.SPEED * (this.game.world.isWading(this.pos) ? 0.5 : 1) * (this.aim ? BOW.AIM_SPEED : 1); // água poluída deixa lento
     this.dir.set(x * cos + z * sin, -x * sin + z * cos);
     this.pos.x += this.dir.x * speed * dt;
     this.pos.z += this.dir.y * speed * dt;
@@ -258,7 +435,7 @@ export class Player extends Entity {
   }
 
   private sheetsFor(sheet: PoseSheet): Layered {
-    return sheet === 'dash' ? this.dashSheets : sheet === 'attack' ? this.attackSheets : sheet === 'maraca' ? this.maracaSheets : this.move;
+    return sheet === 'dash' ? this.dashSheets : sheet === 'attack' ? this.attackSheets : sheet === 'maraca' ? this.maracaSheets : sheet === 'bow' ? this.bowSheets : this.move;
   }
 
   // ---------- desenho ----------
@@ -268,7 +445,14 @@ export class Player extends Entity {
     if (this.dashing) {
       this.pose.sheet = 'dash'; this.pose.col = frames(1 - this.dashTimer / PLAYER.DASH_TIME, 8);
     } else if (this.attacking) {
-      this.pose.sheet = this.weapon === 'maraca' ? 'maraca' : 'attack'; this.pose.col = this.combo * 6 + frames(this.attackProgress, 6);
+      if (this.weapon === 'bow') {
+        // puxando: quadros 0-4 até encaixar; segurando: fica no 4 (treme na carga cheia); soltando: 5-7
+        this.pose.sheet = 'bow';
+        const a = this.aim;
+        this.pose.col = a ? (a.time < BOW.DRAW ? frames(a.time / BOW.DRAW, 5) : a.full && Math.floor(a.time * 16) % 2 ? 3 : 4)
+          : 5 + frames(this.attackProgress, 3);
+      }
+      else { this.pose.sheet = this.weapon === 'maraca' ? 'maraca' : 'attack'; this.pose.col = this.combo * 6 + frames(this.attackProgress, 6); }
     } else {
       this.pose.sheet = 'move'; this.pose.col = !this.grounded ? 2 : moving ? 1 + (Math.floor(this.walkAnim) % 6) : 0;
     }
@@ -285,6 +469,8 @@ export class Player extends Entity {
     this.hat.visible = this.inventory.hasLayer('hat');
     // um fio à frente do corpo, para não brigar na profundidade
     this.hat.position.copy(this.pos).addScaledVector(this.game.engine.camera.position.clone().sub(this.pos).normalize(), 0.03);
+
+    this.renderBack(row, tint);
 
     const ground = this.game.world.groundAt(this.pos.x, this.pos.z), air = this.pos.y - ground;
     this.shadow.position.set(this.pos.x, ground + 0.05, this.pos.z);

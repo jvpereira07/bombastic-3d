@@ -15,7 +15,7 @@ export const NET = {
 } as const;
 
 /** Folha usada no quadro atual; a linha (direção) cada cliente calcula pela própria câmera. */
-export type PoseSheet = 'move' | 'attack' | 'maraca' | 'dash';
+export type PoseSheet = 'move' | 'attack' | 'maraca' | 'bow' | 'dash';
 
 export interface PlayerState {
   p: [number, number, number];   // posição
@@ -26,7 +26,7 @@ export interface PlayerState {
   dead: boolean;
 }
 
-export type MobKind = 'rat' | 'bomb' | 'gator';
+export type MobKind = 'rat' | 'bomb' | 'gator' | 'roach';
 
 /** Estado de um mob simulado pelo dono do shard. `s`/`c` = pose (folha/coluna) própria de cada tipo. */
 export interface MobState {

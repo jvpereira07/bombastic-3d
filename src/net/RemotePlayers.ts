@@ -7,8 +7,8 @@ import { Player } from '../game/entities/Player';
 import { PLAYER } from '../game/config';
 import { NET, type PlayerState, type PoseSheet } from './protocol';
 
-const COLS: Record<PoseSheet, number> = { move: 7, attack: 18, maraca: 18, dash: 8 };
-const HAT: Record<PoseSheet, string> = { move: 'hat_move', attack: 'hat_atk', maraca: 'hat_atk', dash: 'hat_dash' };
+const COLS: Record<PoseSheet, number> = { move: 7, attack: 18, maraca: 18, bow: 8, dash: 8 };
+const HAT: Record<PoseSheet, string> = { move: 'hat_move', attack: 'hat_atk', maraca: 'hat_atk', bow: 'hat_bow', dash: 'hat_dash' };
 
 interface Snapshot { t: number; s: PlayerState }
 
@@ -29,7 +29,7 @@ class RemotePlayer {
       ({ body: new SpriteSheet(texture, COLS[sheet], 4), hat: new SpriteSheet(assets.texture(HAT[sheet]), COLS[sheet], 4) });
     this.sheets = {
       move: make('move', assets.texture('player_move')), attack: make('attack', assets.texture('player_atk')),
-      maraca: make('maraca', Player.maracaAttackTexture(assets)), dash: make('dash', assets.texture('player_dash')),
+      maraca: make('maraca', Player.maracaAttackTexture(assets)), bow: make('bow', assets.texture('player_bow')), dash: make('dash', assets.texture('player_dash')),
     };
     this.body = new Billboard(scene, this.sheets.move.body.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
     this.hat = new Billboard(scene, this.sheets.move.hat.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);

@@ -47,8 +47,8 @@ export class MrKabumstic extends Actor {
   get canBeHit(): boolean { return this.fighting; }
   private get healthRatio(): number { return this.hp / BOSS.HP; }
 
-  takeHit(): void {
-    this.hp--; this.hurtTimer = 0.12;
+  takeHit(_direction?: THREE.Vector3, damage = 1): void {
+    this.hp -= damage; this.hurtTimer = 0.12;
     this.game.sfx.hit();
     if (this.hp <= 0) this.die();
   }
