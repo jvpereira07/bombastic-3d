@@ -28,6 +28,7 @@ export class CreativeMenu extends Modal {
     const items: Entry[] = [
       { label: 'Poção', icon: 'potion', run: (p) => game.dropItem('potion', p.x, p.z) },
       { label: 'Maraca', icon: 'maraca', run: (p) => game.dropItem('maraca', p.x, p.z) },
+      { label: 'Arco', icon: 'bow', run: (p) => game.dropItem('bow', p.x, p.z) },
       { label: 'Chapéu', icon: 'sombrero', run: (p) => game.dropItem('sombrero', p.x, p.z) },
     ];
     const actions: Entry[] = [

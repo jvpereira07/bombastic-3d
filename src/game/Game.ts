@@ -225,7 +225,7 @@ export class Game {
 
     this.hud.render({
       hp: this.player.hp, maxHp: PLAYER.MAX_HP, stamina: this.player.stamina, maxStamina: PLAYER.MAX_STAMINA,
-      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'), hasMaraca: this.player.inventory.has('maraca'), weapon: this.player.weapon,
+      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'), hands: this.player.hands, activeHand: this.player.activeHand,
       boss: { visible: this.boss.fighting, hp: this.boss.hp, maxHp: BOSS.HP },
       showManholePrompt: !this.player.dead && this.world.manholeNear(p) !== undefined,
       comboStage: this.player.comboStage,
@@ -300,7 +300,9 @@ export class Game {
     input.onLockChange((locked) => this.hud.setHintVisible(!locked && !Modal.anyOpen));
     input.onKey(['Space'], () => player.jump());
     input.onKey(['KeyF', 'KeyJ'], () => player.attack());
-    input.onKey(['KeyQ', 'Digit1'], () => player.drinkPotion());
+    input.onKey(['KeyQ'], () => player.drinkPotion());
+    input.onKey(['Digit1'], () => player.selectHand(0));
+    input.onKey(['Digit2'], () => player.selectHand(1));
     input.onKey(['ShiftLeft', 'ShiftRight'], () => player.dash());
     input.onKey(['KeyG'], () => player.switchWeapon());
     input.onKey(['KeyE'], () => this.useManhole());
@@ -326,6 +328,7 @@ export class Game {
     for (let i = 0; i < 3; i++) this.dropItem('potion', -3 + i * 3, 4);
     this.dropItem('sombrero', 0, -4);
     this.dropItem('maraca', 3, -4);
+    this.dropItem('bow', 6, -4);
     this.spawn(new Gator(this, TestArena.RIVER_X, 0));
     this.input.onKey(['KeyR'], () => {
       const a = Math.random() * Math.PI * 2, p = this.player.pos;
@@ -354,5 +357,6 @@ export class Game {
     }
     this.dropItem('sombrero', best.x, best.z);
     this.dropItem('maraca', -6, 5);
+    this.dropItem('bow', 7, 6);
   }
 }

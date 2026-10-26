@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { facingRow } from '../../engine/math';
-import { AIM_ASSIST, COMBO, MARACA, PHYSICS, PLAYER } from '../config';
+import { AIM_ASSIST, BOW, COMBO, MARACA, PHYSICS, PLAYER } from '../config';
 import type { Game } from '../Game';
 import { Inventory } from '../items/Inventory';
-import { ITEMS, type ItemId } from '../items/items';
+import { ITEMS, type ItemId, type Weapon } from '../items/items';
+import { Arrow } from './Arrow';
 import { Entity, type Hittable } from './Entity';
 import { MaracaShot } from './MaracaShot';
 import type { PlayerState, PoseSheet } from '../../net/protocol';
@@ -14,7 +15,10 @@ import { SlashProjectile } from './SlashProjectile';
 /** Ordem das linhas do pygame (direita, esquerda, baixo, cima) para as do jogo (costas, esquerda, frente, direita). */
 const PYGAME_DIR = [3, 1, 2, 0] as const;
 
-export type Weapon = 'sword' | 'maraca';
+export type { Weapon } from '../items/items';
+
+/** Índice da mão: 0 = tecla 1, 1 = tecla 2. */
+export type Hand = 0 | 1;
 
 /** Folhas do corpo e a camada de chapéu correspondente (mesma grade, desenhada por cima). */
 interface Layered { body: SpriteSheet; hat: SpriteSheet }
@@ -39,8 +43,9 @@ export class Player extends Entity {
   private comboWindow = 0;
   /** Apertou ataque no fim do golpe: o próximo sai assim que este acabar. */
   private queued = false;
-  /** Arma na mão; o ataque (clique/F) usa ela. G troca quando já tem a maraca. */
-  weapon: Weapon = 'sword';
+  /** As duas armas equipadas (tecla 1 e 2); a ativa vai na mão, a outra nas costas. */
+  readonly hands: [Weapon | null, Weapon | null] = ['sword', null];
+  activeHand: Hand = 0;
   private attackDuration: number = PLAYER.ATTACK_TIME;
   private readonly dashHit = new Set<Hittable>();
   private dashTimer = 0;
@@ -50,6 +55,10 @@ export class Player extends Entity {
   private readonly move: Layered;
   private readonly attackSheets: Layered;
   private readonly maracaSheets: Layered;
+  private readonly bowSheets: Layered;
+  /** Arma reserva desenhada nas costas. */
+  private readonly back: Billboard;
+  private readonly backIcons: Record<Weapon, THREE.Texture>;
   private readonly dashSheets: Layered;
   private readonly body: Billboard;
   private readonly hat: Billboard;
@@ -63,6 +72,7 @@ export class Player extends Entity {
     this.move = layered('player_move', 'hat_move', 7);          // col 0 parado, 1-6 andando
     this.attackSheets = layered('player_atk', 'hat_atk', 18);   // combo de 3 golpes x 6 quadros
     this.dashSheets = layered('player_dash', 'hat_dash', 8);
+    this.bowSheets = layered('player_bow', 'hat_bow', 8);          // corpo + arco (pygame, linhas 40-43)
     this.maracaSheets = { body: new SpriteSheet(Player.maracaAttackTexture(a), 18, 4), hat: new SpriteSheet(a.texture('hat_atk'), 18, 4) };
     this.body = new Billboard(game.scene, this.move.body.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
     this.hat = new Billboard(game.scene, this.move.hat.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
@@ -70,12 +80,18 @@ export class Player extends Entity {
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
     this.shadow.rotation.x = -Math.PI / 2;
     game.scene.add(this.shadow);
+    this.backIcons = { sword: a.texture('sword'), maraca: a.texture('maraca'), bow: a.texture('bow') };
+    for (const t of Object.values(this.backIcons)) t.magFilter = t.minFilter = THREE.NearestFilter;
+    this.back = new Billboard(game.scene, this.backIcons.sword, 1.25, 1.25, 0.5);
+    this.inventory.add('sword');
     this.inventory.add('potion');
   }
 
   get dead(): boolean { return this.deadTimer > 0; }
   get dashing(): boolean { return this.dashTimer > 0; }
   get attacking(): boolean { return this.attackTimer > 0; }
+  /** Arma na mão agora (a ativa; se a mão estiver vazia, a outra). */
+  get weapon(): Weapon { return this.hands[this.activeHand] ?? this.hands[this.activeHand === 0 ? 1 : 0] ?? 'sword'; }
   private get row(): number { return facingRow(this.dir.x, this.dir.y, this.game.camera.yaw); }
 
   // ---------- ações ----------
@@ -91,6 +107,7 @@ export class Player extends Entity {
   attack(): void {
     if (this.dead || this.dashing) return;
     if (this.attacking) {
+      if (this.weapon === 'bow') return; // arco não emenda: uma flecha por puxada
       // no fim do golpe o clique fica guardado e emenda o próximo; antes disso é ignorado (sem spam)
       if (this.attackProgress >= COMBO.BUFFER && this.combo < 2) this.queued = true;
       return;
@@ -100,29 +117,40 @@ export class Player extends Entity {
 
   private startAttack(stage: number): void {
     this.combo = stage; this.queued = false; this.comboWindow = 0;
-    this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : PLAYER.ATTACK_TIME;
+    if (this.weapon === 'bow') stage = this.combo = 0;
+    this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : this.weapon === 'bow' ? BOW.TIME : PLAYER.ATTACK_TIME;
     if (stage === 2) this.attackDuration += COMBO.FINISHER_RECOVERY; // golpe final pesa mais
     this.attackTimer = this.attackDuration; this.attackFired = false;
     let wanted = this.dir.clone();
-    if (this.weapon === 'maraca') {
+    if (this.weapon !== 'sword') {
       // de longe mira para onde a câmera olha
       const yaw = this.game.camera.yaw;
       wanted = new THREE.Vector2(-Math.sin(yaw), -Math.cos(yaw));
-      this.game.sfx.maraca();
+      if (this.weapon === 'maraca') this.game.sfx.maraca(); else this.game.sfx.bowDraw();
     } else this.game.sfx.slash();
-    const range = this.weapon === 'maraca' ? AIM_ASSIST.MARACA_RANGE : AIM_ASSIST.SWORD_RANGE;
+    const range = this.weapon === 'maraca' ? AIM_ASSIST.MARACA_RANGE : this.weapon === 'bow' ? AIM_ASSIST.BOW_RANGE : AIM_ASSIST.SWORD_RANGE;
     this.dir.copy(this.game.lockOn.assist(this.pos, wanted, range));
   }
 
-  /** Troca entre espada e maraca (a maraca vai na segunda mão; precisa tê-la). */
-  switchWeapon(): void {
-    if (!this.inventory.hasAbility('maraca') || this.attacking || this.dead) return;
-    this.weapon = this.weapon === 'sword' ? 'maraca' : 'sword';
+  /** Passa para a arma da mão `hand` (teclas 1 e 2); a outra vai para as costas. */
+  selectHand(hand: Hand): void {
+    if (hand === this.activeHand || !this.hands[hand] || this.attacking || this.dead) return;
+    this.activeHand = hand; this.comboWindow = 0;
     this.game.sfx.pickup();
   }
 
-  /** Empunha uma arma específica (pelo inventário). */
-  wield(weapon: Weapon): void { if (weapon !== this.weapon) this.switchWeapon(); }
+  /** G: alterna entre as duas mãos. */
+  switchWeapon(): void { this.selectHand(this.activeHand === 0 ? 1 : 0); }
+
+  /** Põe uma arma que o jogador tem numa das mãos; se ela já estava na outra, as duas trocam de lugar. */
+  equip(weapon: Weapon, hand: Hand): void {
+    if (this.attacking) return;
+    const other: Hand = hand === 0 ? 1 : 0;
+    if (this.hands[other] === weapon) this.hands[other] = this.hands[hand];
+    this.hands[hand] = weapon;
+    if (!this.hands[this.activeHand]) this.activeHand = hand;
+    this.game.sfx.pickup();
+  }
 
   dash(): void {
     if (!this.inventory.hasAbility('dash') || this.dead || this.dashing || this.dashCooldown > 0 || this.stamina < PLAYER.DASH_COST) return;
@@ -148,7 +176,12 @@ export class Player extends Entity {
     const def = ITEMS[item];
     if (def.kind === 'equipment') {
       this.game.sfx.hat();
-      this.game.hud.showBanner(def.grants.includes('maraca') ? `${def.name}! G troca entre espada e maraca (ataque de longe)` : `${def.name}! Shift para dar dash`);
+      if (def.weapon) {
+        // arma nova vai para uma mão vazia, se houver
+        const free = this.hands.indexOf(null);
+        if (free >= 0) { this.hands[free] = def.weapon; this.game.hud.showBanner(`${def.name}! Aperte ${free + 1} para empunhar`); }
+        else this.game.hud.showBanner(`${def.name}! Equipe pelo inventário (Tab)`);
+      } else this.game.hud.showBanner(`${def.name}! Shift para dar dash`);
     }
     else this.game.sfx.pickup();
     return true;
@@ -193,6 +226,15 @@ export class Player extends Entity {
     this.attackTimer -= dt;
     const stage = this.combo, progress = this.attackProgress;
     // avanço no começo do golpe da espada (o final avança mais)
+    if (this.weapon === 'bow') {
+      if (!this.attackFired && progress >= BOW.FIRE_AT) {
+        this.attackFired = true;
+        this.game.spawn(new Arrow(this.game, this.pos, new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize()));
+        this.game.sfx.bowShot();
+      }
+      if (this.attackTimer <= 0) { this.attackTimer = 0; this.comboWindow = 0; }
+      return;
+    }
     if (this.weapon === 'sword' && progress < 0.5) {
       const lunge = COMBO.LUNGE[stage]! * (1 - progress * 2) * dt;
       this.pos.x += this.dir.x * lunge; this.pos.z += this.dir.y * lunge;
@@ -225,6 +267,18 @@ export class Player extends Entity {
       if (side.dot(offset) < 0) side.negate();
       target.takeHit(dir.add(side).normalize().multiplyScalar(PLAYER.DASH_KNOCKBACK));
     }
+  }
+
+  /** Arma reserva nas costas: atrás do corpo, ou na frente quando ele está de costas para a câmera. */
+  private renderBack(row: number, tint: number): void {
+    const reserve = this.hands[this.activeHand === 0 ? 1 : 0];
+    this.back.visible = !!reserve && reserve !== this.weapon && !this.dashing;
+    if (!reserve) return;
+    this.back.setMap(this.backIcons[reserve]);
+    this.back.tint(tint);
+    const toCamera = this.game.engine.camera.position.clone().sub(this.pos).setY(0).normalize();
+    this.back.position.copy(this.pos).setY(this.pos.y + 1.15).addScaledVector(toCamera, row === 0 ? 0.25 : -0.25);
+    this.back.material.rotation = row === 1 ? -0.5 : row === 3 ? 0.5 : 0.35; // inclinada como numa bainha
   }
 
   /** Ataque com a maraca: corpo do pygame sem a espada + camada da maraca, na ordem de linhas do jogo. */
@@ -295,7 +349,7 @@ export class Player extends Entity {
   }
 
   private sheetsFor(sheet: PoseSheet): Layered {
-    return sheet === 'dash' ? this.dashSheets : sheet === 'attack' ? this.attackSheets : sheet === 'maraca' ? this.maracaSheets : this.move;
+    return sheet === 'dash' ? this.dashSheets : sheet === 'attack' ? this.attackSheets : sheet === 'maraca' ? this.maracaSheets : sheet === 'bow' ? this.bowSheets : this.move;
   }
 
   // ---------- desenho ----------
@@ -305,7 +359,8 @@ export class Player extends Entity {
     if (this.dashing) {
       this.pose.sheet = 'dash'; this.pose.col = frames(1 - this.dashTimer / PLAYER.DASH_TIME, 8);
     } else if (this.attacking) {
-      this.pose.sheet = this.weapon === 'maraca' ? 'maraca' : 'attack'; this.pose.col = this.combo * 6 + frames(this.attackProgress, 6);
+      if (this.weapon === 'bow') { this.pose.sheet = 'bow'; this.pose.col = frames(this.attackProgress, 8); }
+      else { this.pose.sheet = this.weapon === 'maraca' ? 'maraca' : 'attack'; this.pose.col = this.combo * 6 + frames(this.attackProgress, 6); }
     } else {
       this.pose.sheet = 'move'; this.pose.col = !this.grounded ? 2 : moving ? 1 + (Math.floor(this.walkAnim) % 6) : 0;
     }
@@ -322,6 +377,8 @@ export class Player extends Entity {
     this.hat.visible = this.inventory.hasLayer('hat');
     // um fio à frente do corpo, para não brigar na profundidade
     this.hat.position.copy(this.pos).addScaledVector(this.game.engine.camera.position.clone().sub(this.pos).normalize(), 0.03);
+
+    this.renderBack(row, tint);
 
     const ground = this.game.world.groundAt(this.pos.x, this.pos.z), air = this.pos.y - ground;
     this.shadow.position.set(this.pos.x, ground + 0.05, this.pos.z);

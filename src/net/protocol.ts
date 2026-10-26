@@ -15,7 +15,7 @@ export const NET = {
 } as const;
 
 /** Folha usada no quadro atual; a linha (direção) cada cliente calcula pela própria câmera. */
-export type PoseSheet = 'move' | 'attack' | 'maraca' | 'dash';
+export type PoseSheet = 'move' | 'attack' | 'maraca' | 'bow' | 'dash';
 
 export interface PlayerState {
   p: [number, number, number];   // posição

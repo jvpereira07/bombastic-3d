@@ -29,7 +29,7 @@ export const COMBO = {
 } as const;
 
 /** Mira assistida: sem trava, o golpe puxa para o inimigo mais próximo dentro do cone (graus) e do alcance. */
-export const AIM_ASSIST = { CONE: 55, SWORD_RANGE: 7, MARACA_RANGE: 20 } as const;
+export const AIM_ASSIST = { CONE: 55, SWORD_RANGE: 7, MARACA_RANGE: 20, BOW_RANGE: 32 } as const;
 
 /** Cucarachas: bando que dança em roda em volta do jogador, fechando a roda e dando botes. */
 export const CUCARACHA = {
@@ -42,6 +42,9 @@ export const CUCARACHA = {
 export const RAT = { SIGHT: 20, LOSE: 28, POUNCE_RANGE: 3.5, POUNCE_COOLDOWN: 1.4, DAMAGE: 12, HP: 3, POTION_DROP: 0.2 } as const;
 
 /** Maraca, arma de segunda mão trocável com a espada: atira ondas sonoras de longe (~24 m). */
+/** Arco: puxa a corda (8 quadros) e solta a flecha perto do fim; sem combo. */
+export const BOW = { TIME: 0.6, FIRE_AT: 0.6, SPEED: 36, LIFE: 1, DAMAGE: 2, KNOCKBACK: 12, SIZE: 1.4 } as const;
+
 export const MARACA = { TIME: 0.42, SPEED: 22, LIFE: 1.1, KNOCKBACK: 16, SIZE: 3.2 } as const;
 
 export const GATOR = {

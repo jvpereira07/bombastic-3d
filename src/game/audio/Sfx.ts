@@ -11,6 +11,13 @@ export class Sfx {
   maraca(): void {
     for (let i = 0; i < 4; i++) this.audio.noise({ dur: 0.06, freq: 5200, f2: 3800, vol: 0.18, q: 1.2, delay: i * 0.07 });
   }
+  /** Puxando a corda do arco: rangido subindo. */
+  bowDraw(): void { this.audio.tone({ f: 180, f2: 320, type: 'sawtooth', dur: 0.3, vol: 0.05 }); }
+  /** Flecha solta: estalo da corda + zunido. */
+  bowShot(): void {
+    this.audio.tone({ f: 520, f2: 140, type: 'triangle', dur: 0.12, vol: 0.18 });
+    this.audio.noise({ dur: 0.18, freq: 4000, f2: 1200, vol: 0.12, q: 0.7 });
+  }
   slash(): void { this.audio.noise({ dur: 0.13, freq: 3000, f2: 700, vol: 0.22, q: 0.8 }); }
   /** "!" de um mob que notou o jogador: dois bipes subindo. */
   alert(): void {

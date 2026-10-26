@@ -1,5 +1,5 @@
 import type { Assets } from '../../engine/Assets';
-import type { Weapon } from '../entities/Player';
+import type { Weapon } from '../items/items';
 import { ITEMS } from '../items/items';
 
 /** Limites do preenchimento nas imagens das barras: início, fim e largura total (px). */
@@ -14,7 +14,8 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 
 export interface HudState {
   hp: number; maxHp: number; stamina: number; maxStamina: number;
-  potions: number; hasHat: boolean; hasMaraca: boolean; weapon: Weapon;
+  potions: number; hasHat: boolean;
+  hands: readonly (Weapon | null)[]; activeHand: number;
   boss: { visible: boolean; hp: number; maxHp: number };
   showManholePrompt: boolean;
   /** Etapa do combo (0 a 2) ou -1 fora de combo. */
@@ -29,8 +30,7 @@ export class Hud {
   private readonly potionCount = $('#potN');
   private readonly potionSlot = $('#potSlot');
   private readonly hatSlot = $('#hatSlot');
-  private readonly weaponSlot = $('#weaponSlot');
-  private readonly weaponImg = $<HTMLImageElement>('#weaponImg');
+  private readonly handSlots = [$('#hand0'), $('#hand1')];
   private readonly weaponIcons: Record<Weapon, string>;
   private readonly bossPanel = $('#boss');
   private readonly bossFill = $('#boss i');
@@ -51,7 +51,7 @@ export class Hud {
     this.stFill.style.backgroundImage = `url(${assets.url('ui_st_full')})`;
     $<HTMLImageElement>('#potImg').src = assets.url(ITEMS.potion.icon);
     $<HTMLImageElement>('#hatImg').src = assets.url(ITEMS.sombrero.icon);
-    this.weaponIcons = { sword: assets.url('sword'), maraca: assets.url(ITEMS.maraca.icon) };
+    this.weaponIcons = { sword: assets.url(ITEMS.sword.icon), maraca: assets.url(ITEMS.maraca.icon), bow: assets.url(ITEMS.bow.icon) };
   }
 
   onMuteClick(handler: () => void): void {
@@ -79,8 +79,12 @@ export class Hud {
     this.potionCount.textContent = String(s.potions);
     this.potionSlot.classList.toggle('off', s.potions === 0);
     this.hatSlot.classList.toggle('off', !s.hasHat);
-    this.weaponSlot.classList.toggle('off', !s.hasMaraca); // sem maraca não há o que trocar
-    if (!this.weaponImg.src.endsWith(this.weaponIcons[s.weapon])) this.weaponImg.src = this.weaponIcons[s.weapon];
+    this.handSlots.forEach((slot, i) => {
+      const weapon = s.hands[i], img = slot.querySelector('img');
+      slot.classList.toggle('off', !weapon);
+      slot.classList.toggle('active', !!weapon && i === s.activeHand);
+      if (img) { img.hidden = !weapon; if (weapon && !img.src.endsWith(this.weaponIcons[weapon])) img.src = this.weaponIcons[weapon]; }
+    });
     this.bossPanel.hidden = !s.boss.visible;
     this.bossFill.style.width = `${(s.boss.hp / s.boss.maxHp) * 100}%`;
     this.prompt.hidden = !s.showManholePrompt;
