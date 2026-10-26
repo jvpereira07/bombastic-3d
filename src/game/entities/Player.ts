@@ -280,11 +280,21 @@ export class Player extends Entity {
     this.back.setMap(this.backIcons[reserve]);
     this.back.tint(tint);
     const facing = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
-    const toCamera = this.game.engine.camera.position.clone().sub(this.pos).normalize();
-    // atrás do corpo no mundo (de lado aparece no lado das costas) e, na profundidade, atrás dele
-    // quando olha para a câmera ou na frente quando está de costas (a altura sozinha a puxaria para frente)
-    const away = facing.dot(toCamera.clone().setY(0).normalize()) < -0.3 ? 1 : -1; // de lado também fica atrás
-    this.back.position.copy(this.pos).setY(this.pos.y + 1.15).addScaledVector(facing, -0.3).addScaledVector(toCamera, away * 0.45);
+    const cam = this.game.engine.camera, eye = cam.position;
+    const forward = cam.getWorldDirection(new THREE.Vector3());
+    // o corpo é um sprite virado para a câmera: a altura das costas se mede no "para cima" da câmera,
+    // e o lado das costas só no "para a direita" (senão, com a câmera alta, a arma escorrega para a cintura)
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+    const want = this.pos.clone().addScaledVector(up, 1.2).addScaledVector(right, -facing.dot(right) * 0.3);
+    // camada: atrás do corpo, a não ser que ele esteja claramente de costas para a câmera
+    const toCamera = eye.clone().sub(this.pos).setY(0).normalize();
+    const inFront = facing.dot(toCamera) < -0.3;
+    // a profundidade fica presa à do corpo (±0,3), qualquer que seja a altura da câmera; desliza pelo raio
+    // de visão para não mudar onde aparece na tela
+    const bodyDepth = this.pos.clone().sub(eye).dot(forward), depth = want.clone().sub(eye).dot(forward);
+    const target = bodyDepth + (inFront ? -0.3 : 0.3);
+    this.back.position.copy(eye).addScaledVector(want.sub(eye), depth > 0.1 ? target / depth : 1);
     // inclinação de bainha, espelhada conforme o lado que a câmera vê
     this.back.material.rotation = row === 1 ? 0.45 : row === 3 ? -0.45 : row === 0 ? 0.35 : -0.35;
   }
