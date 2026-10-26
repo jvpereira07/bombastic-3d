@@ -32,6 +32,7 @@ import { LockOn } from './ui/LockOn';
 import { Emotes } from './ui/Emotes';
 import { Minimap } from './ui/Minimap';
 import { BowReticle } from './ui/BowReticle';
+import { DebugOverlay } from './ui/DebugOverlay';
 import type { Hud } from './ui/Hud';
 import { NetClient } from '../net/NetClient';
 import { NET } from '../net/protocol';
@@ -72,6 +73,7 @@ export class Game {
   readonly emotes: Emotes;
   private readonly minimap: Minimap;
   private readonly bowReticle: BowReticle;
+  private readonly debug: DebugOverlay;
   private readonly damageNumbers: DamageNumbers;
   /** Vida vista no frame anterior, para mostrar o dano (ou cura) de cada criatura. */
   private readonly lastHp = new WeakMap<object, number>();
@@ -91,6 +93,7 @@ export class Game {
     this.emotes = new Emotes(engine.camera);
     this.minimap = new Minimap(this);
     this.bowReticle = new BowReticle(this);
+    this.debug = new DebugOverlay(this);
     this.damageNumbers = new DamageNumbers(engine.camera);
     if (mode === 'test') this.setupTest();
     else { this.spawner.populate(); this.placeItems(); this.stockSewer(this.world.sewer.layout.seed); }
@@ -117,6 +120,9 @@ export class Game {
     this.net.connect();
   }
 
+  /** Para a depuração: "desligado", "conectando" ou "conectado". */
+  get onlineStatus(): string { return !this.net ? 'desligado' : this.net.connected ? 'conectado' : 'conectando'; }
+
   // ---------- serviços usados pelas entidades ----------
   spawn<T extends Entity>(entity: T): T { this.entities.push(entity); return entity; }
 
@@ -125,6 +131,9 @@ export class Game {
     this.spawn(new Explosion(this, at.clone(), !remote));
     if (!remote && this.net?.connected) this.net.sendFx('boom', [at.x, at.y, at.z]);
   }
+
+  /** Todas as entidades vivas (só leitura; usado pela depuração). */
+  get allEntities(): readonly Entity[] { return this.entities; }
 
   actors(): Actor[] { return this.entities.filter((e): e is Actor => e instanceof Actor); }
 
@@ -191,6 +200,7 @@ export class Game {
 
   // ---------- laço ----------
   update(dt: number): void {
+    this.debug.update(dt); // mede o FPS mesmo pausado
     if (Modal.anyOpen && !this.net) return; // offline, menu aberto pausa o jogo
     this.player.update(dt);
     this.world.shards.update(this.player.pos);

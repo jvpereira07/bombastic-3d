@@ -19,7 +19,7 @@ export class Input {
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     addEventListener('keydown', (e) => {
-      if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+      if (e.code === 'Space' || e.code === 'Tab' || e.code === 'F3') e.preventDefault(); // F3 = depuração, não a busca do navegador
       if (e.repeat) return void this.down.add(e.code);
       const blocked = this.blocked();
       for (const b of this.keyHandlers.get(e.code) ?? []) if (b.always || !blocked) b.handler(e.code);

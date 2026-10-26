@@ -2,7 +2,7 @@ import { button, h, Modal, tabs } from './components';
 
 const CONTROLS: [string, string][] = [
   ['WASD', 'Andar'], ['Espaço', 'Pular'], ['Clique / F', 'Atacar (emende 3 para o combo)'], ['Segurar (arco)', 'Mirar e carregar; soltar dispara'], ['T / botão direito', 'Travar/soltar mira'], ['1 / 2', 'Arma da mão 1 / mão 2'], ['G', 'Alternar entre as mãos'], ['Q', 'Beber poção'],
-  ['Shift', 'Dash (com o chapéu)'], ['E', 'Tampa do esgoto'], ['Tab / I', 'Inventário'], ['N', 'Mapa (mundo e esgoto)'], ['P / Esc', 'Pausa'], ['M', 'Som'],
+  ['Shift', 'Dash (com o chapéu)'], ['E', 'Tampa do esgoto'], ['Tab / I', 'Inventário'], ['N', 'Mapa (mundo e esgoto)'], ['P / Esc', 'Pausa'], ['M', 'Som'], ['F3', 'Depuração'],
 ];
 
 export interface PauseActions { inventory(): void; toggleMute(): boolean; muted(): boolean }

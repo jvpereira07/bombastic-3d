@@ -216,3 +216,8 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 .bow-aim.full::before { background: var(--red); animation: aim-pulse .25s ease-in-out infinite alternate; }
 @keyframes aim-pulse { to { transform: scale(1.12); } }
 @media (prefers-reduced-motion: reduce) { .bow-aim.full::before { animation: none; } }
+
+/* ---------- depuração (F3) ---------- */
+#debug { position: fixed; top: calc(170px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); z-index: 7; margin: 0;
+  max-width: min(560px, calc(100% - 24px)); padding: 8px 10px; background: #2a1206d9; color: var(--paper); border: 2px solid var(--ink);
+  border-radius: 6px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; pointer-events: none; }

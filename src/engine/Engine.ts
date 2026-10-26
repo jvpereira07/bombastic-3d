@@ -15,6 +15,7 @@ export class Engine {
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.info.autoReset = false; // o contorno faz várias passadas: conta o quadro inteiro
     this.outline = new CelOutline(this.renderer, this.camera);
     this.resize();
     addEventListener('resize', () => this.resize());
@@ -27,7 +28,8 @@ export class Engine {
   start(): void {
     const frame = (): void => {
       const dt = Math.min(this.clock.getDelta(), Engine.MAX_DT);
-      for (const s of this.systems) s.update(dt);
+      for (const s of this.systems) s.update(dt); // leem as contagens do quadro anterior
+      this.renderer.info.reset();
       this.outline.render(this.scene);
       requestAnimationFrame(frame);
     };
