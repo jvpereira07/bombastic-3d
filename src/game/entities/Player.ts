@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { facingRow } from '../../engine/math';
+import { isWalkable } from '../../engine/procedural/TileGrid';
 import { AIM_ASSIST, BOW, COMBO, MARACA, PHYSICS, PLAYER } from '../config';
 import type { Game } from '../Game';
 import { Inventory } from '../items/Inventory';
@@ -219,6 +220,7 @@ export class Player extends Entity {
 
     if (this.aim) this.updateAim(dt);
     this.game.camera.aimZoom = this.aim ? BOW.AIM_ZOOM : 1;
+    this.game.camera.shoulder = this.aim ? 1 : 0;
     const moving = this.walk(dt);
     if (this.aim) this.dir.copy(this.aimDir()); // mirando, olha para onde mira mesmo andando
     if (this.knockback) {
@@ -257,15 +259,45 @@ export class Player extends Entity {
     else this.comboWindow = stage < 2 ? COMBO.WINDOW : 0;
   }
 
-  /** Para onde a flecha vai: o alvo travado ou a frente da câmera. */
-  private aimDir(): THREE.Vector2 {
+  /** Altura de onde a flecha sai (peito). */
+  private get chest(): THREE.Vector3 { return this.pos.clone().setY(this.pos.y + 1.1); }
+
+  /**
+   * Ponto mirado: o alvo travado, ou o que o centro da tela enxerga — o raio da câmera bate num
+   * inimigo, no chão ou numa parede; sem nada no caminho, um ponto bem longe na mesma linha.
+   */
+  aimPoint(): THREE.Vector3 {
     const target = this.game.lockOn.target;
-    if (target) {
-      const d = new THREE.Vector2(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
-      if (d.lengthSq() > 1e-4) return d.normalize();
+    if (target) return target.pos.clone().setY(target.pos.y + 1);
+    const cam = this.game.engine.camera, origin = cam.position.clone();
+    const ray = cam.getWorldDirection(new THREE.Vector3());
+    const start = Math.max(0, this.pos.clone().sub(origin).dot(ray)); // ignora o que está entre a câmera e o jogador
+    let best = BOW.AIM_RANGE + start;
+    for (const t of this.game.hittables()) {
+      if (!t.canBeHit) continue;
+      const c = t.pos.clone().setY(t.pos.y + 1), along = c.clone().sub(origin).dot(ray);
+      if (along < start || along > best) continue;
+      if (origin.clone().addScaledVector(ray, along).distanceTo(c) < t.hitRadius) best = along;
     }
-    const yaw = this.game.camera.yaw;
-    return new THREE.Vector2(-Math.sin(yaw), -Math.cos(yaw));
+    const { world } = this.game, p = new THREE.Vector3();
+    for (let s = start; s < best; s += 0.5) {
+      p.copy(origin).addScaledVector(ray, s);
+      const wall = world.zoneOf(p) === 'sewer' && !isWalkable(world.sewer.tileAt(p.x, p.z));
+      if (p.y <= world.groundAt(p.x, p.z) || wall) return p;
+    }
+    return origin.addScaledVector(ray, best);
+  }
+
+  /** Direção 3D do peito até o ponto mirado. */
+  private aimDir3(): THREE.Vector3 {
+    const d = this.aimPoint().sub(this.chest);
+    return d.lengthSq() > 1e-4 ? d.normalize() : new THREE.Vector3(this.dir.x, 0, this.dir.y);
+  }
+
+  /** Só o plano (para onde o corpo vira). */
+  private aimDir(): THREE.Vector2 {
+    const d = this.aimDir3(), flat = new THREE.Vector2(d.x, d.z);
+    return flat.lengthSq() > 1e-4 ? flat.normalize() : this.dir.clone();
   }
 
   /** Corda puxada: carrega enquanto segura; soltando (depois de encaixar a flecha), dispara. */
@@ -275,8 +307,10 @@ export class Player extends Entity {
     if (this.bowCharge === 1 && !aim.full) { aim.full = true; this.game.sfx.bowFull(); }
     if (this.game.input.primaryHeld() || aim.time < BOW.DRAW) return; // toque rápido ainda termina de puxar
     const charge = this.bowCharge ?? 0;
-    this.dir.copy(this.game.lockOn.assist(this.pos, this.aimDir(), AIM_ASSIST.BOW_RANGE));
-    this.game.spawn(new Arrow(this.game, this.pos, new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize(), charge));
+    // vai exatamente para onde a mira aponta (com trava, no alvo); a mira assistida não mexe no arco
+    const dir = this.aimDir3();
+    this.dir.copy(this.aimDir());
+    this.game.spawn(new Arrow(this.game, this.chest, dir, charge));
     this.game.sfx.bowShot();
     this.aim = null;
     this.attackDuration = this.attackTimer = BOW.RELEASE; this.attackFired = true;

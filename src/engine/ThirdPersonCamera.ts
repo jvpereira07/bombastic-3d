@@ -29,6 +29,9 @@ export class ThirdPersonCamera {
 
   /** Mirando com o arco: a câmera chega mais perto (fração da distância normal). */
   aimZoom = 1;
+  /** Mirando: 1 põe a câmera sobre o ombro direito, para o centro da tela ficar à frente do jogador. */
+  shoulder = 0;
+  private shoulderNow = 0;
 
   zoom(delta: number): void { this.targetDistance = clamp(this.targetDistance + delta * 0.01, 4, 20); }
 
@@ -41,14 +44,19 @@ export class ThirdPersonCamera {
     this.pitch += (this.targetPitch - this.pitch) * k;
     this.distance += (this.targetDistance * this.aimZoom - this.distance) * damp(8, dt);
     this.lookAt.lerp(target, damp(12, dt));
+    this.shoulderNow += (this.shoulder - this.shoulderNow) * damp(10, dt);
+    // ombro: desloca o ponto olhado para a direita e um pouco para cima (só enquanto mira)
+    const look = this.lookAt.clone()
+      .add(new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).multiplyScalar(1.3 * this.shoulderNow))
+      .setY(this.lookAt.y + 0.5 * this.shoulderNow);
 
     const offset = new THREE.Vector3(
       Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch),
     ).multiplyScalar(this.distance);
-    const pos = this.lookAt.clone().add(offset);
+    const pos = look.clone().add(offset);
     pos.y = Math.max(pos.y, this.world.groundAt(pos.x, pos.z) + 0.6);
-    this.world.constrainCamera(pos, this.lookAt);
+    this.world.constrainCamera(pos, look);
     this.camera.position.copy(pos);
-    this.camera.lookAt(this.lookAt);
+    this.camera.lookAt(look);
   }
 }

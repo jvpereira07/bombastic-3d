@@ -18,7 +18,7 @@ export class Arrow extends Entity {
   /** `charge` 0..1: força da puxada (dano, velocidade e empurrão). */
   constructor(game: Game, from: THREE.Vector3, private readonly dir: THREE.Vector3, private readonly charge = 1) {
     super(game);
-    this.pos = from.clone().addScaledVector(dir, 0.9).setY(from.y + 1.1);
+    this.pos = from.clone().addScaledVector(dir, 0.9); // `from` já é a altura do peito
     const tex = game.assets.texture('arrow');
     tex.magFilter = tex.minFilter = THREE.NearestFilter;
     this.sprite = new Billboard(game.scene, tex, BOW.SIZE, BOW.SIZE, 0.5);
