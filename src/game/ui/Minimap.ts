@@ -2,11 +2,23 @@ import { isChamber, type DungeonLayout } from '../../engine/procedural/DungeonGe
 import { Tile, isWalkable } from '../../engine/procedural/TileGrid';
 import type { Game } from '../Game';
 
-/** Cores das células no mapa (no tom dos menus). */
-const COLORS: Record<number, [number, number, number]> = {
-  [Tile.Floor]: [255, 227, 170], [Tile.Water]: [90, 160, 200], [Tile.Bridge]: [184, 101, 43],
-};
-const WALL: [number, number, number] = [74, 35, 16];
+type Rgb = [number, number, number];
+
+/** Cor média de uma imagem (reduzida para 8x8 e tirada a média), opcionalmente multiplicada por um tom. */
+function averageColor(img: CanvasImageSource, tint: Rgb = [255, 255, 255]): Rgb {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 8;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return [128, 128, 128];
+  ctx.drawImage(img, 0, 0, 8, 8);
+  const data = ctx.getImageData(0, 0, 8, 8).data, sum = [0, 0, 0];
+  let n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3]! < 128) continue;
+    sum[0]! += data[i]!; sum[1]! += data[i + 1]!; sum[2]! += data[i + 2]!; n++;
+  }
+  return sum.map((v, k) => Math.round((v / Math.max(1, n)) * tint[k]! / 255)) as Rgb;
+}
 
 /**
  * Minimapa do esgoto com névoa: só aparece o que o jogador já viu (um raio em volta dele
@@ -25,6 +37,9 @@ export class Minimap {
   private explored = new Uint8Array(0);
   private layout: DungeonLayout | null = null;
   private dirty = false;
+  /** Cor de cada tipo de célula, tirada das texturas do esgoto (piso, água e tijolo das paredes). */
+  private readonly colors: Record<number, Rgb>;
+  private readonly wall: Rgb;
   expanded = false;
 
   constructor(private readonly game: Game) {
@@ -35,6 +50,14 @@ export class Minimap {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D indisponível');
     this.ctx = ctx;
+    const image = (name: string): CanvasImageSource => game.assets.texture(name).image as CanvasImageSource;
+    const floor = averageColor(image('floor'));
+    this.colors = {
+      [Tile.Floor]: floor,
+      [Tile.Water]: averageColor(image('water'), [0xb8, 0xd8, 0xa0]), // mesmo tom do material da água
+      [Tile.Bridge]: floor.map((v) => Math.round(v * 0.72)) as Rgb,   // ponte é piso: mais escura para destacar
+    };
+    this.wall = averageColor(image('brick'));
     game.input.onKey(['KeyN'], () => { this.expanded = !this.expanded; });
   }
 
@@ -82,7 +105,7 @@ export class Minimap {
     const wall = !isWalkable(t) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx = 0, dy = 0]) => isWalkable(grid.get(x + dx, y + dy)));
     if (!isWalkable(t) && !wall) return;
     this.explored[i] = 1;
-    const [r, g, b] = wall ? WALL : COLORS[t]!;
+    const [r, g, b] = wall ? this.wall : this.colors[t]!;
     this.fogData.data.set([r, g, b, 255], i * 4);
     this.dirty = true;
   }
