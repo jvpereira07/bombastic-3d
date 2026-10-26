@@ -13,6 +13,8 @@ export class Sfx {
   }
   /** Puxando a corda do arco: rangido subindo. */
   bowDraw(): void { this.audio.tone({ f: 180, f2: 320, type: 'sawtooth', dur: 0.3, vol: 0.05 }); }
+  /** Corda no máximo: tic agudo. */
+  bowFull(): void { this.audio.tone({ f: 1400, dur: 0.05, vol: 0.07 }); }
   /** Flecha solta: estalo da corda + zunido. */
   bowShot(): void {
     this.audio.tone({ f: 520, f2: 140, type: 'triangle', dur: 0.12, vol: 0.18 });

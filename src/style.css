@@ -204,3 +204,15 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 #minimap.expanded::before { content: 'Mapa do esgoto · N fecha'; display: block; margin: -2px 2px 6px; color: var(--paper); font: 700 16px var(--font); text-shadow: 2px 2px 0 var(--ink); }
 .slot.hand.active { background: #fff0c2; transform: translate(-2px, -3px); box-shadow: inset 3px 3px 0 #c98a45, inset -3px -3px 0 #fff3d1, 6px 7px 0 #2a1206; outline: 3px solid var(--red); outline-offset: 2px; }
 .slot.hand { transition: transform .1s; }
+
+/* ---------- mira do arco ---------- */
+.bow-aim { position: fixed; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 5; --charge: 0; }
+.bow-aim::before { content: ''; position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%;
+  background: conic-gradient(var(--gold) calc(var(--charge) * 360deg), #fff3d166 0);
+  -webkit-mask: radial-gradient(circle, transparent 14px, #000 15px); mask: radial-gradient(circle, transparent 14px, #000 15px);
+  filter: drop-shadow(2px 2px 0 var(--ink)); }
+.bow-aim::after { content: '+'; position: absolute; left: 0; top: 0; transform: translate(-50%, -54%); font: 700 30px/1 var(--font);
+  color: var(--paper); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; }
+.bow-aim.full::before { background: var(--red); animation: aim-pulse .25s ease-in-out infinite alternate; }
+@keyframes aim-pulse { to { transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .bow-aim.full::before { animation: none; } }

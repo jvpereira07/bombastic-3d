@@ -12,6 +12,8 @@ export class Input {
   private readonly altClickHandlers: (() => void)[] = [];
   private readonly lockChangeHandlers: ((locked: boolean) => void)[] = [];
   private drag: { x: number; y: number } | null = null;
+  /** Botão esquerdo pressionado com o mouse travado (segurar ataque). */
+  private mouseHeld = false;
   /** Quando devolve true (ex.: menu aberto), o jogo não recebe teclas, cliques nem movimento. */
   blocked: () => boolean = () => false;
 
@@ -24,11 +26,17 @@ export class Input {
       this.down.add(e.code);
     });
     addEventListener('keyup', (e) => this.down.delete(e.code));
-    addEventListener('blur', () => this.down.clear());
+    addEventListener('blur', () => { this.down.clear(); this.mouseHeld = false; });
 
+    // com o mouse travado o ataque sai ao apertar (não ao soltar), para dar para segurar
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || !this.locked || this.blocked()) return;
+      this.mouseHeld = true;
+      for (const h of this.lockedClickHandlers) h();
+    });
+    addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseHeld = false; });
     canvas.addEventListener('click', () => {
-      if (this.blocked()) return;
-      if (this.locked) { for (const h of this.lockedClickHandlers) h(); return; }
+      if (this.blocked() || this.locked) return;
       try { void canvas.requestPointerLock()?.catch?.(() => undefined); } catch { /* sem pointer lock: arrastar continua valendo */ }
     });
     document.addEventListener('pointerlockchange', () => { for (const h of this.lockChangeHandlers) h(this.locked); });
@@ -44,6 +52,9 @@ export class Input {
     canvas.addEventListener('mousedown', (e) => { if (e.button === 2 && !this.blocked()) for (const h of this.altClickHandlers) h(); });
     canvas.addEventListener('wheel', (e) => { e.preventDefault(); for (const h of this.zoomHandlers) h(e.deltaY); }, { passive: false });
   }
+
+  /** Ataque sendo segurado: botão esquerdo (travado) ou F/J. */
+  primaryHeld(): boolean { return !this.blocked() && (this.mouseHeld || this.isDown('KeyF', 'KeyJ')); }
 
   get locked(): boolean { return document.pointerLockElement === this.canvas; }
 

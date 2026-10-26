@@ -6,6 +6,8 @@ import { BOW } from '../config';
 import type { Game } from '../Game';
 import { Entity } from './Entity';
 
+const lerp = ([a, b]: readonly [number, number], t: number): number => a + (b - a) * t;
+
 /** Flecha do arco: voa reto e rápido, para no primeiro inimigo ou na parede. */
 export class Arrow extends Entity {
   private life = BOW.LIFE;
@@ -13,7 +15,8 @@ export class Arrow extends Entity {
   private readonly sprite: Billboard;
   private readonly scratch = new THREE.Vector3();
 
-  constructor(game: Game, from: THREE.Vector3, private readonly dir: THREE.Vector3) {
+  /** `charge` 0..1: força da puxada (dano, velocidade e empurrão). */
+  constructor(game: Game, from: THREE.Vector3, private readonly dir: THREE.Vector3, private readonly charge = 1) {
     super(game);
     this.pos = from.clone().addScaledVector(dir, 0.9).setY(from.y + 1.1);
     const tex = game.assets.texture('arrow');
@@ -23,13 +26,13 @@ export class Arrow extends Entity {
 
   update(dt: number): void {
     this.life -= dt;
-    this.pos.addScaledVector(this.dir, BOW.SPEED * dt);
+    this.pos.addScaledVector(this.dir, lerp(BOW.SPEED, this.charge) * dt);
     this.sprite.position.copy(this.pos);
     this.aim();
     for (const target of this.game.hittables()) {
       if (!target.canBeHit) continue;
       if (flatDistance(target.pos, this.pos) < target.hitRadius && Math.abs(target.pos.y + 1 - this.pos.y) < 1.8) {
-        target.takeHit(this.dir.clone().multiplyScalar(BOW.KNOCKBACK), BOW.DAMAGE);
+        target.takeHit(this.dir.clone().multiplyScalar(lerp(BOW.KNOCKBACK, this.charge)), Math.round(lerp(BOW.DAMAGE, this.charge)));
         this.alive = false;
         return;
       }

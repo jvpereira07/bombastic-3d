@@ -27,6 +27,9 @@ export class ThirdPersonCamera {
     this.targetYaw += diff * damp(8, dt);
   }
 
+  /** Mirando com o arco: a câmera chega mais perto (fração da distância normal). */
+  aimZoom = 1;
+
   zoom(delta: number): void { this.targetDistance = clamp(this.targetDistance + delta * 0.01, 4, 20); }
 
   /** Teleporte: corta a suavização. */
@@ -36,7 +39,7 @@ export class ThirdPersonCamera {
     const k = damp(18, dt);
     this.yaw += (this.targetYaw - this.yaw) * k;
     this.pitch += (this.targetPitch - this.pitch) * k;
-    this.distance += (this.targetDistance - this.distance) * damp(8, dt);
+    this.distance += (this.targetDistance * this.aimZoom - this.distance) * damp(8, dt);
     this.lookAt.lerp(target, damp(12, dt));
 
     const offset = new THREE.Vector3(

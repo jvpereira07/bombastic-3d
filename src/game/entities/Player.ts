@@ -43,6 +43,8 @@ export class Player extends Entity {
   private comboWindow = 0;
   /** Apertou ataque no fim do golpe: o próximo sai assim que este acabar. */
   private queued = false;
+  /** Puxando a corda do arco (segurando o ataque); `full` = já avisou a carga cheia. */
+  private aim: { time: number; full: boolean } | null = null;
   /** As duas armas equipadas (tecla 1 e 2); a ativa vai na mão, a outra nas costas. */
   readonly hands: [Weapon | null, Weapon | null] = ['sword', null];
   activeHand: Hand = 0;
@@ -89,7 +91,11 @@ export class Player extends Entity {
 
   get dead(): boolean { return this.deadTimer > 0; }
   get dashing(): boolean { return this.dashTimer > 0; }
-  get attacking(): boolean { return this.attackTimer > 0; }
+  get attacking(): boolean { return this.attackTimer > 0 || this.aim !== null; }
+  /** Mirando com o arco: força da puxada (0..1) ou null. */
+  get bowCharge(): number | null {
+    return this.aim ? Math.min(1, Math.max(0, (this.aim.time - BOW.DRAW) / BOW.CHARGE)) : null;
+  }
   /** Arma na mão agora (a ativa; se a mão estiver vazia, a outra). */
   get weapon(): Weapon { return this.hands[this.activeHand] ?? this.hands[this.activeHand === 0 ? 1 : 0] ?? 'sword'; }
   private get row(): number { return facingRow(this.dir.x, this.dir.y, this.game.camera.yaw); }
@@ -106,8 +112,12 @@ export class Player extends Entity {
 
   attack(): void {
     if (this.dead || this.dashing) return;
+    if (this.weapon === 'bow') {
+      // arco: começa a puxar; enquanto segurar, mira e carrega; ao soltar, dispara (ver updateAim)
+      if (!this.attacking) { this.aim = { time: 0, full: false }; this.game.sfx.bowDraw(); }
+      return;
+    }
     if (this.attacking) {
-      if (this.weapon === 'bow') return; // arco não emenda: uma flecha por puxada
       // no fim do golpe o clique fica guardado e emenda o próximo; antes disso é ignorado (sem spam)
       if (this.attackProgress >= COMBO.BUFFER && this.combo < 2) this.queued = true;
       return;
@@ -117,8 +127,7 @@ export class Player extends Entity {
 
   private startAttack(stage: number): void {
     this.combo = stage; this.queued = false; this.comboWindow = 0;
-    if (this.weapon === 'bow') stage = this.combo = 0;
-    this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : this.weapon === 'bow' ? BOW.TIME : PLAYER.ATTACK_TIME;
+    this.attackDuration = this.weapon === 'maraca' ? MARACA.TIME : PLAYER.ATTACK_TIME;
     if (stage === 2) this.attackDuration += COMBO.FINISHER_RECOVERY; // golpe final pesa mais
     this.attackTimer = this.attackDuration; this.attackFired = false;
     let wanted = this.dir.clone();
@@ -155,7 +164,7 @@ export class Player extends Entity {
   dash(): void {
     if (!this.inventory.hasAbility('dash') || this.dead || this.dashing || this.dashCooldown > 0 || this.stamina < PLAYER.DASH_COST) return;
     this.stamina -= PLAYER.DASH_COST;
-    this.dashTimer = PLAYER.DASH_TIME; this.dashCooldown = PLAYER.DASH_COOLDOWN; this.attackTimer = 0;
+    this.dashTimer = PLAYER.DASH_TIME; this.dashCooldown = PLAYER.DASH_COOLDOWN; this.attackTimer = 0; this.aim = null;
     this.dashHit.clear();
     this.game.sfx.dash();
   }
@@ -208,7 +217,10 @@ export class Player extends Entity {
     this.stamina = Math.min(PLAYER.MAX_STAMINA, this.stamina + PLAYER.STAMINA_REGEN * dt);
     if (this.dead) { this.updateDeath(dt); this.render(false); return; }
 
+    if (this.aim) this.updateAim(dt);
+    this.game.camera.aimZoom = this.aim ? BOW.AIM_ZOOM : 1;
     const moving = this.walk(dt);
+    if (this.aim) this.dir.copy(this.aimDir()); // mirando, olha para onde mira mesmo andando
     if (this.knockback) {
       this.pos.addScaledVector(this.knockback, dt);
       this.knockback.multiplyScalar(Math.exp(-dt * 6));
@@ -226,15 +238,7 @@ export class Player extends Entity {
     this.attackTimer -= dt;
     const stage = this.combo, progress = this.attackProgress;
     // avanço no começo do golpe da espada (o final avança mais)
-    if (this.weapon === 'bow') {
-      if (!this.attackFired && progress >= BOW.FIRE_AT) {
-        this.attackFired = true;
-        this.game.spawn(new Arrow(this.game, this.pos, new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize()));
-        this.game.sfx.bowShot();
-      }
-      if (this.attackTimer <= 0) { this.attackTimer = 0; this.comboWindow = 0; }
-      return;
-    }
+    if (this.weapon === 'bow') { if (this.attackTimer <= 0) this.attackTimer = 0; return; } // só a soltura da corda
     if (this.weapon === 'sword' && progress < 0.5) {
       const lunge = COMBO.LUNGE[stage]! * (1 - progress * 2) * dt;
       this.pos.x += this.dir.x * lunge; this.pos.z += this.dir.y * lunge;
@@ -251,6 +255,31 @@ export class Player extends Entity {
     this.attackTimer = 0;
     if (this.queued) this.startAttack(stage + 1);
     else this.comboWindow = stage < 2 ? COMBO.WINDOW : 0;
+  }
+
+  /** Para onde a flecha vai: o alvo travado ou a frente da câmera. */
+  private aimDir(): THREE.Vector2 {
+    const target = this.game.lockOn.target;
+    if (target) {
+      const d = new THREE.Vector2(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
+      if (d.lengthSq() > 1e-4) return d.normalize();
+    }
+    const yaw = this.game.camera.yaw;
+    return new THREE.Vector2(-Math.sin(yaw), -Math.cos(yaw));
+  }
+
+  /** Corda puxada: carrega enquanto segura; soltando (depois de encaixar a flecha), dispara. */
+  private updateAim(dt: number): void {
+    const aim = this.aim!;
+    aim.time += dt;
+    if (this.bowCharge === 1 && !aim.full) { aim.full = true; this.game.sfx.bowFull(); }
+    if (this.game.input.primaryHeld() || aim.time < BOW.DRAW) return; // toque rápido ainda termina de puxar
+    const charge = this.bowCharge ?? 0;
+    this.dir.copy(this.game.lockOn.assist(this.pos, this.aimDir(), AIM_ASSIST.BOW_RANGE));
+    this.game.spawn(new Arrow(this.game, this.pos, new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize(), charge));
+    this.game.sfx.bowShot();
+    this.aim = null;
+    this.attackDuration = this.attackTimer = BOW.RELEASE; this.attackFired = true;
   }
 
   private get attackProgress(): number { return 1 - this.attackTimer / this.attackDuration; }
@@ -327,11 +356,11 @@ export class Player extends Entity {
       this.pos.z += this.dir.y * PLAYER.SPEED * PLAYER.DASH_SPEED * dt;
       return false;
     }
-    if (this.attacking) return false;
+    if (this.attacking && !this.aim) return false;
     let { x, z } = this.game.input.axis();
     if (!x && !z) return false;
     const len = Math.hypot(x, z); x /= len; z /= len;
-    const speed = PLAYER.SPEED * (this.game.world.isWading(this.pos) ? 0.5 : 1); // água poluída deixa lento
+    const speed = PLAYER.SPEED * (this.game.world.isWading(this.pos) ? 0.5 : 1) * (this.aim ? BOW.AIM_SPEED : 1); // água poluída deixa lento
     this.dir.set(x * cos + z * sin, -x * sin + z * cos);
     this.pos.x += this.dir.x * speed * dt;
     this.pos.z += this.dir.y * speed * dt;
@@ -377,7 +406,13 @@ export class Player extends Entity {
     if (this.dashing) {
       this.pose.sheet = 'dash'; this.pose.col = frames(1 - this.dashTimer / PLAYER.DASH_TIME, 8);
     } else if (this.attacking) {
-      if (this.weapon === 'bow') { this.pose.sheet = 'bow'; this.pose.col = frames(this.attackProgress, 8); }
+      if (this.weapon === 'bow') {
+        // puxando: quadros 0-4 até encaixar; segurando: fica no 4 (treme na carga cheia); soltando: 5-7
+        this.pose.sheet = 'bow';
+        const a = this.aim;
+        this.pose.col = a ? (a.time < BOW.DRAW ? frames(a.time / BOW.DRAW, 5) : a.full && Math.floor(a.time * 16) % 2 ? 3 : 4)
+          : 5 + frames(this.attackProgress, 3);
+      }
       else { this.pose.sheet = this.weapon === 'maraca' ? 'maraca' : 'attack'; this.pose.col = this.combo * 6 + frames(this.attackProgress, 6); }
     } else {
       this.pose.sheet = 'move'; this.pose.col = !this.grounded ? 2 : moving ? 1 + (Math.floor(this.walkAnim) % 6) : 0;
