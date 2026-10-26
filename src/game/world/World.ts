@@ -28,6 +28,9 @@ export class World implements CameraWorld {
   private readonly fog = new THREE.Fog(0xbfe6ff, 90, 215);
   private readonly sky = new THREE.Color(0x8fd3ff);
 
+  /** Tampa do esgoto no mundo de cima (marcada no minimapa). */
+  readonly surfaceLid = new THREE.Vector3(5, 0, 8);
+
   constructor(private readonly scene: THREE.Scene, assets: Assets, anisotropy: number, readonly mode: WorldMode = 'normal') {
     scene.background = this.sky;
     scene.fog = this.fog;
@@ -37,7 +40,7 @@ export class World implements CameraWorld {
     sun.position.set(30, 60, 20);
     scene.add(sun);
 
-    const surfaceLid = new THREE.Vector3(5, 0, 8);
+    const surfaceLid = this.surfaceLid;
     const groups = new Map<ShardId, THREE.Object3D>();
     if (mode === 'test') new TestArena(scene);
     else for (const [id, group] of new Overworld(scene, assets, anisotropy, [surfaceLid]).shards) groups.set(id, group);
