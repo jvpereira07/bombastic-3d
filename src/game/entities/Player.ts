@@ -269,16 +269,24 @@ export class Player extends Entity {
     }
   }
 
-  /** Arma reserva nas costas: atrás do corpo, ou na frente quando ele está de costas para a câmera. */
+  /**
+   * Arma reserva presa nas costas, seguindo para onde o jogador olha (não a câmera):
+   * some atrás dele quando está de frente e aparece por cima quando está de costas.
+   */
   private renderBack(row: number, tint: number): void {
     const reserve = this.hands[this.activeHand === 0 ? 1 : 0];
     this.back.visible = !!reserve && reserve !== this.weapon && !this.dashing;
     if (!reserve) return;
     this.back.setMap(this.backIcons[reserve]);
     this.back.tint(tint);
-    const toCamera = this.game.engine.camera.position.clone().sub(this.pos).setY(0).normalize();
-    this.back.position.copy(this.pos).setY(this.pos.y + 1.15).addScaledVector(toCamera, row === 0 ? 0.25 : -0.25);
-    this.back.material.rotation = row === 1 ? -0.5 : row === 3 ? 0.5 : 0.35; // inclinada como numa bainha
+    const facing = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
+    const toCamera = this.game.engine.camera.position.clone().sub(this.pos).normalize();
+    // atrás do corpo no mundo (de lado aparece no lado das costas) e, na profundidade, atrás dele
+    // quando olha para a câmera ou na frente quando está de costas (a altura sozinha a puxaria para frente)
+    const away = facing.dot(toCamera.clone().setY(0).normalize()) < -0.3 ? 1 : -1; // de lado também fica atrás
+    this.back.position.copy(this.pos).setY(this.pos.y + 1.15).addScaledVector(facing, -0.3).addScaledVector(toCamera, away * 0.45);
+    // inclinação de bainha, espelhada conforme o lado que a câmera vê
+    this.back.material.rotation = row === 1 ? 0.45 : row === 3 ? -0.45 : row === 0 ? 0.35 : -0.35;
   }
 
   /** Ataque com a maraca: corpo do pygame sem a espada + camada da maraca, na ordem de linhas do jogo. */
