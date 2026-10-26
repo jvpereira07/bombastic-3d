@@ -19,8 +19,8 @@ export class RatSpawner {
   }
 
   populateSewer(): void {
-    for (let i = 0; i < 7; i++) this.spawn('sewer');
-    this.spawnTroupe('sewer');
+    for (let i = 0; i < 26; i++) this.spawn('sewer');
+    for (let i = 0; i < 4; i++) this.spawnTroupe('sewer');
   }
 
   /** Bando de cucarachas juntinho num ponto; cada uma sabe seu lugar na roda. */
@@ -41,7 +41,7 @@ export class RatSpawner {
 
   spawn(zone: Zone): void {
     if (zone === 'sewer') {
-      const p = this.game.world.sewer.randomFloor();
+      const p = this.game.world.sewer.randomFloor(Math.random, ['salao', 'encruzilhada', 'passagem']);
       if (this.game.maySpawnAt(p.x, p.z)) this.game.spawn(new Rat(this.game, p.x, p.z));
       return;
     }

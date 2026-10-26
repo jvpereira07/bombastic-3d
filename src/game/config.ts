@@ -2,7 +2,7 @@
 export const SEWER = {
   SX: 1000,         // centro em x
   TILE: 4,          // metros por célula da grade
-  GRID: 40,         // células por lado (160 m)
+  GRID: 132,        // células por lado (528 m): malha de 11x11 nós de 12 células
   WATER_Y: -0.45,
   WALL_H: 12,
 } as const;

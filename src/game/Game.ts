@@ -331,13 +331,13 @@ export class Game {
 
   /** Jacarés nos canais e poções nas salas da masmorra atual. */
   private stockSewer(seed: number): void {
-    for (const p of this.world.sewer.waterSpots(4, seed)) this.spawn(new Gator(this, p.x, p.z));
+    for (const p of this.world.sewer.waterSpots(12, seed)) this.spawn(new Gator(this, p.x, p.z));
     this.dropSewerPotions();
   }
 
   /** Poções são locais (cada jogador pega as suas), mesmo online. */
   private dropSewerPotions(): void {
-    for (let i = 0; i < 5; i++) { const p = this.world.sewer.randomFloor(); this.dropItem('potion', p.x, p.z); }
+    for (let i = 0; i < 16; i++) { const p = this.world.sewer.randomFloor(Math.random, ['beco']); this.dropItem('potion', p.x, p.z); }
   }
 
   /** Poções pelo mapa; o chapéu no ponto mais alto perto do início. */
