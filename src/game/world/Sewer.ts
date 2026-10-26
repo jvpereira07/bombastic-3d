@@ -75,6 +75,14 @@ export class Sewer {
     return new THREE.Vector3(Sewer.ORIGIN.x + (gx + 0.5) * TILE, 0, Sewer.ORIGIN.y + (gy + 0.5) * TILE);
   }
 
+  /** Célula da grade sob um ponto do mundo (pode cair fora da grade). */
+  cellOf(x: number, z: number): { x: number; y: number } {
+    return { x: Math.floor((x - Sewer.ORIGIN.x) / TILE), y: Math.floor((z - Sewer.ORIGIN.y) / TILE) };
+  }
+
+  /** Célula da tampa de saída (para marcar no minimapa). */
+  get exitCell(): { x: number; y: number } { return this.cellOf(this.exitLid.x, this.exitLid.z); }
+
   tileAt(x: number, z: number): Tile {
     return this.layout.grid.get(Math.floor((x - Sewer.ORIGIN.x) / TILE), Math.floor((z - Sewer.ORIGIN.y) / TILE));
   }

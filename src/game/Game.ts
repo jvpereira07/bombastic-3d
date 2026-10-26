@@ -30,6 +30,7 @@ import { PauseMenu } from './ui/PauseMenu';
 import { DamageNumbers } from './ui/DamageNumbers';
 import { LockOn } from './ui/LockOn';
 import { Emotes } from './ui/Emotes';
+import { Minimap } from './ui/Minimap';
 import type { Hud } from './ui/Hud';
 import { NetClient } from '../net/NetClient';
 import { NET } from '../net/protocol';
@@ -68,6 +69,7 @@ export class Game {
   mobSync: MobSync | null = null;
   readonly lockOn: LockOn;
   readonly emotes: Emotes;
+  private readonly minimap: Minimap;
   private readonly damageNumbers: DamageNumbers;
   /** Vida vista no frame anterior, para mostrar o dano (ou cura) de cada criatura. */
   private readonly lastHp = new WeakMap<object, number>();
@@ -85,6 +87,7 @@ export class Game {
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
     this.lockOn = new LockOn(this);
     this.emotes = new Emotes(engine.camera);
+    this.minimap = new Minimap(this);
     this.damageNumbers = new DamageNumbers(engine.camera);
     if (mode === 'test') this.setupTest();
     else { this.spawner.populate(); this.placeItems(); this.stockSewer(this.world.sewer.layout.seed); }
@@ -210,6 +213,7 @@ export class Game {
     this.trackDamage();
     this.damageNumbers.update(dt);
     this.emotes.update(dt);
+    this.minimap.update();
 
     this.music.set(this.boss.fighting && !this.player.dead);
     this.music.update();
