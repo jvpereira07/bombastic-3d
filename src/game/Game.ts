@@ -239,7 +239,7 @@ export class Game {
 
     this.hud.render({
       hp: this.player.hp, maxHp: PLAYER.MAX_HP, stamina: this.player.stamina, maxStamina: PLAYER.MAX_STAMINA,
-      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.has('sombrero'), hands: this.player.hands, activeHand: this.player.activeHand,
+      potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.hasLayer('hat'), hands: this.player.hands, activeHand: this.player.activeHand,
       boss: { visible: this.boss.fighting, hp: this.boss.hp, maxHp: BOSS.HP },
       showManholePrompt: !this.player.dead && this.world.manholeNear(p) !== undefined,
       comboStage: this.player.comboStage,
