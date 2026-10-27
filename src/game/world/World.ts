@@ -15,7 +15,7 @@ export type WorldMode = 'normal' | 'test';
 
 type Atmosphere = { sky: number; fog: number; near: number; far: number };
 const ATMOSPHERE: Record<Zone, Atmosphere> = {
-  overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 55, far: 165 }, // termina antes da borda dos shards visíveis
+  overworld: { sky: 0x8fd3ff, fog: 0x8fd3ff, near: 55, far: 165 }, // mesma cor do céu: o que está longe some de vez
   sewer: { sky: 0x0d1410, fog: 0x0d1410, near: 8, far: 45 },
 };
 const TEST_ATMOSPHERE: Atmosphere = { sky: 0xffffff, fog: 0xffffff, near: 60, far: 160 };
@@ -26,7 +26,7 @@ export class World implements CameraWorld {
   readonly manholes: ManholeCover[];
   readonly shards: ShardManager;
   private readonly overworld: Overworld | null = null;
-  private readonly fog = new THREE.Fog(0xbfe6ff, 55, 165);
+  private readonly fog = new THREE.Fog(0x8fd3ff, 55, 165);
   private readonly sky = new THREE.Color(0x8fd3ff);
 
   /** Tampa do esgoto no mundo de cima (marcada no minimapa). */
