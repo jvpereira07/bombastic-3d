@@ -37,7 +37,6 @@ export class Overworld {
   private static readonly TERRACE = 2.6;
   private static readonly WALL = OVERWORLD.HALF - 10;
   private static readonly SEGMENTS = 45;          // por shard: 8 x 45 = 360 na superfície toda
-  private static readonly DETAIL_TILE = 5.5;      // metros por repetição da textura de detalhe
   private static readonly PROPS_PER_SHARD = 22;
   private static readonly TUFTS_PER_SHARD = 45;
 
@@ -81,9 +80,7 @@ export class Overworld {
   readonly shards = new Map<ShardId, THREE.Group>();
 
   constructor(scene: THREE.Scene, assets: Assets, anisotropy: number, keepClear: THREE.Vector3[]) {
-    const grass = ProceduralSprites.grassDetail();
-    grass.anisotropy = anisotropy;
-    const terrain = toonMaterial({ map: grass, vertexColors: true });
+    const terrain = Overworld.terrainMaterial(assets, anisotropy);
     const scenery = Overworld.sceneryTextures(assets);
     for (const coord of allShards()) {
       const group = new THREE.Group();
@@ -105,27 +102,83 @@ export class Overworld {
     ).normalize();
   }
 
+  /** Metros cobertos por uma repetição das fotos de chão. */
+  private static readonly GROUND_TILE = 4;
+  /** Fotos de chão (ambientCG, CC0), na ordem dos pesos: grama, terra, areia, neve; o que sobra é rocha. */
+  private static readonly GROUND_LAYERS = ['chao_grama', 'chao_terra', 'chao_areia', 'chao_neve', 'chao_rocha'] as const;
+
+  /**
+   * Terreno com cel shading e cinco fotos de chão misturadas por vértice (`splat` = grama, terra,
+   * areia, neve; rocha é o resto). Cada foto é lida em duas escalas para disfarçar a repetição.
+   * `shade` escurece um pouco cada vértice (variação e areia molhada).
+   */
+  private static terrainMaterial(assets: Assets, anisotropy: number): THREE.MeshToonMaterial {
+    const layers = Overworld.GROUND_LAYERS.map((name) => {
+      const t = assets.tile(name, 1, 1, anisotropy);
+      t.magFilter = THREE.LinearFilter;
+      return t;
+    });
+    const m = toonMaterial();
+    m.onBeforeCompile = (shader) => {
+      layers.forEach((t, i) => { shader.uniforms[`ground${i}`] = { value: t }; });
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>
+attribute vec4 splat;
+attribute float shade;
+varying vec4 vSplat;
+varying float vShade;
+varying vec2 vGroundUv;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+vSplat = splat; vShade = shade; vGroundUv = (modelMatrix * vec4(position, 1.0)).xz / ${Overworld.GROUND_TILE.toFixed(1)};`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+uniform sampler2D ground0, ground1, ground2, ground3, ground4;
+varying vec4 vSplat;
+varying float vShade;
+varying vec2 vGroundUv;
+vec3 ground(sampler2D t) { return mix(texture2D(t, vGroundUv).rgb, texture2D(t, vGroundUv * 0.23 + 0.37).rgb, 0.35); }`)
+        .replace('#include <map_fragment>', `float rock = max(0.0, 1.0 - dot(vSplat, vec4(1.0)));
+diffuseColor.rgb *= (ground(ground0) * vSplat.x * vec3(1.15, 1.45, 0.9) + ground(ground1) * vSplat.y * vec3(1.15, 1.0, 0.85) + ground(ground2) * vSplat.z * 1.1
+  + ground(ground3) * vSplat.w * 1.05 + ground(ground4) * rock * vec3(1.35, 1.45, 1.6)) * vShade;`);
+    };
+    return m;
+  }
+
   private static buildTerrain(coord: ShardCoord, material: THREE.Material, rng: Rng): THREE.Mesh {
     const seg = Overworld.SEGMENTS, origin = shardOrigin(coord);
     const geo = new THREE.PlaneGeometry(SHARD.SIZE, SHARD.SIZE, seg, seg);
     geo.rotateX(-Math.PI / 2);
     geo.translate(origin.x + SHARD.SIZE / 2, 0, origin.y + SHARD.SIZE / 2);
     const pos = geo.attributes.position as THREE.BufferAttribute;
-    const normals = new Float32Array(pos.count * 3), colors: number[] = [];
+    const normals = new Float32Array(pos.count * 3), splat = new Float32Array(pos.count * 4), shade = new Float32Array(pos.count);
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i), y = Overworld.height(x, z), n = Overworld.normalAt(x, z);
       pos.setY(i, y);
       normals.set([n.x, n.y, n.z], i * 3);
-      const c = new THREE.Color(Overworld.groundColor(x, y, z, n.y, rng)).offsetHSL(0, 0, rng() * 0.03);
-      colors.push(c.r, c.g, c.b);
+      splat.set(Overworld.groundSplat(x, z, n.y), i * 4);
+      shade[i] = (Overworld.weights(x, z).beach > 0.5 && y < OVERWORLD.SEA_Y + 0.4 ? 0.8 : 1) * (0.94 + rng() * 0.06);
     }
     geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
+    geo.setAttribute('shade', new THREE.BufferAttribute(shade, 1));
     geo.computeBoundingSphere();
-    // UV em coordenadas de mundo: a textura de detalhe continua sem emenda entre shards
-    const uv = geo.attributes.uv as THREE.BufferAttribute;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / Overworld.DETAIL_TILE, -pos.getZ(i) / Overworld.DETAIL_TILE);
     return new THREE.Mesh(geo, material);
+  }
+
+  /**
+   * Quanto de cada foto de chão vai num vértice: [grama, terra, areia, neve] (rocha = o que falta para 1).
+   * Grama plana / terra na encosta; deserto e praia em areia (encosta do deserto puxa para terra);
+   * gelo em neve, com rocha nas encostas.
+   */
+  private static groundSplat(x: number, z: number, ny: number): [number, number, number, number] {
+    const w = Overworld.weights(x, z), grassBiome = 1 - w.desert - w.ice - w.beach;
+    const steep = smoothstep(clamp01((0.86 - ny) / 0.14));
+    return [
+      grassBiome * (1 - steep),
+      grassBiome * steep + w.desert * steep * 0.6,
+      w.desert * (1 - steep * 0.6) + w.beach,
+      w.ice * (1 - steep),
+    ];
   }
 
   /** Cor do chão: encosta íngreme vira terra/rocha; o resto segue o bioma (com borda pontilhada entre biomas). */
