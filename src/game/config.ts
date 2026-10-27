@@ -8,7 +8,7 @@ export const SEWER = {
 } as const;
 
 /** Superfície: grama no centro; deserto a leste, gelo ao norte e praia com mar ao sul. */
-export const OVERWORLD = { HALF: 205, SIZE: 440, SEA_Y: -0.6 } as const;
+export const OVERWORLD = { HALF: 370, SIZE: 770, SEA_Y: -0.6 } as const;
 
 export const PHYSICS = { GRAVITY: 30 } as const;
 

@@ -32,8 +32,24 @@ export class Minimap {
   private static readonly SIGHT = 6;   // células reveladas em volta do jogador
   private static readonly ZOOM = 4;    // px por célula no mapa do canto (célula do esgoto = 4 m: 1 px por metro)
   /** Metros por pixel do mapa do mundo de cima. */
-  private static readonly WORLD_M_PER_PX = 2;
-  private overworld: HTMLCanvasElement | null = null;
+  private static readonly WORLD_M_PER_PX = 4;
+  /** Raio (m) revelado em volta do jogador no mundo de cima, e a faixa (m) da borda que vai clareando. */
+  private static readonly WORLD_SIGHT = 36;
+  private static readonly WORLD_EDGE = 10;
+  private static readonly SAVE_KEY = 'bombastic3d.mapa-descoberto';
+  private static readonly SAVE_EVERY = 3; // s
+  /** Cores do mapa inteiro (calculadas uma vez); só a parte descoberta é copiada para `worldFog`. */
+  private worldColors: ImageData | null = null;
+  /** Mapa do mundo de cima como o jogador conhece: transparente onde ainda não foi. */
+  private readonly worldFog = document.createElement('canvas');
+  private worldFogCtx: CanvasRenderingContext2D | null = null;
+  private worldFogData: ImageData | null = null;
+  /** Quanto de cada pixel já foi descoberto (0 a 255). */
+  private worldSeen = new Uint8Array(0);
+  private worldDirty = false;
+  private worldUnsaved = false;
+  private saveTimer = 0;
+  private lastReveal = { x: Infinity, z: Infinity };
   private readonly frame = document.createElement('div');
   private readonly canvas = document.createElement('canvas');
   private readonly ctx: CanvasRenderingContext2D;
@@ -93,32 +109,90 @@ export class Minimap {
     this.draw('Mapa do esgoto', this.fog, me, Minimap.ZOOM, markers);
   }
 
-  /** Mundo de cima: mapa inteiro já conhecido (desenhado uma vez a partir do relevo). */
+  /**
+   * Mundo de cima: o mapa vai sendo descoberto conforme o jogador anda (raio WORLD_SIGHT, borda suave).
+   * A tampa do esgoto e os vendedores só aparecem depois de descobertos. O que já foi visto fica salvo
+   * no navegador e volta ao recarregar.
+   */
   private updateOverworld(): void {
     const { player, world } = this.game;
-    this.overworld ??= Minimap.buildOverworld();
+    if (!this.worldColors) this.initWorldFog();
     const toPx = (x: number, z: number): { x: number; y: number } =>
       ({ x: (x + OVERWORLD.HALF) / Minimap.WORLD_M_PER_PX - 0.5, y: (z + OVERWORLD.HALF) / Minimap.WORLD_M_PER_PX - 0.5 });
-    const lid = world.surfaceLid;
-    this.draw('Mapa do mundo', this.overworld, toPx(player.pos.x, player.pos.z), Minimap.WORLD_M_PER_PX, // 1 px por metro, como no esgoto
-      [{ p: toPx(lid.x, lid.z), color: '#9fd36a', r: 1.5 }, ...this.game.vendors.map((v) => ({ p: toPx(v.pos.x, v.pos.z), color: '#ffd23a', r: 1.5 }))]);
+    if (Math.hypot(player.pos.x - this.lastReveal.x, player.pos.z - this.lastReveal.z) > 1) {
+      this.lastReveal = { x: player.pos.x, z: player.pos.z };
+      this.revealWorld(toPx(player.pos.x, player.pos.z));
+    }
+    if (this.worldDirty) { this.worldFogCtx?.putImageData(this.worldFogData!, 0, 0); this.worldDirty = false; }
+    this.saveWorldFog();
+    const known = (p: { x: number; y: number }): boolean => (this.worldSeen[Math.round(p.y) * this.worldFog.width + Math.round(p.x)] ?? 0) > 128;
+    const markers: Marker[] = [{ p: toPx(world.surfaceLid.x, world.surfaceLid.z), color: '#9fd36a', r: 1.5 },
+      ...this.game.vendors.map((v) => ({ p: toPx(v.pos.x, v.pos.z), color: '#ffd23a', r: 1.5 }))].filter((m) => known(m.p));
+    this.draw(`Mapa do mundo · ${this.exploredPercent()}% descoberto`, this.worldFog, toPx(player.pos.x, player.pos.z), Minimap.WORLD_M_PER_PX, markers);
   }
 
-  /** Uma amostra do terreno a cada WORLD_M_PER_PX metros. */
-  private static buildOverworld(): HTMLCanvasElement {
+  /** Cores do relevo (uma amostra a cada WORLD_M_PER_PX metros) e a névoa, recuperando o que já foi descoberto. */
+  private initWorldFog(): void {
     const size = Math.ceil((OVERWORLD.HALF * 2) / Minimap.WORLD_M_PER_PX);
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return canvas;
-    const img = ctx.createImageData(size, size);
-    for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) {
-      const c = Overworld.mapColor(-OVERWORLD.HALF + (px + 0.5) * Minimap.WORLD_M_PER_PX, -OVERWORLD.HALF + (py + 0.5) * Minimap.WORLD_M_PER_PX);
-      const hex = c.getHex(); // volta para sRGB (THREE.Color guarda em linear)
-      img.data.set([(hex >> 16) & 255, (hex >> 8) & 255, hex & 255, 255], (py * size + px) * 4);
+    this.worldFog.width = this.worldFog.height = size;
+    this.worldFogCtx = this.worldFog.getContext('2d');
+    if (!this.worldFogCtx) throw new Error('Canvas 2D indisponível');
+    const colors = this.worldFogCtx.createImageData(size, size);
+    colors.data.set(Overworld.mapPixels(size, Minimap.WORLD_M_PER_PX));
+    this.worldColors = colors;
+    this.worldFogData = this.worldFogCtx.createImageData(size, size);
+    this.worldSeen = Minimap.loadWorldFog(size * size) ?? new Uint8Array(size * size);
+    for (let i = 0; i < this.worldSeen.length; i++) if (this.worldSeen[i]) this.paintWorld(i);
+    this.worldDirty = true;
+  }
+
+  /** Revela um círculo em volta de `me` (em pixels do mapa), clareando de fora para dentro. */
+  private revealWorld(me: { x: number; y: number }): void {
+    const size = this.worldFog.width, m = Minimap.WORLD_M_PER_PX;
+    const full = (Minimap.WORLD_SIGHT - Minimap.WORLD_EDGE) / m, outer = Minimap.WORLD_SIGHT / m;
+    for (let y = Math.floor(me.y - outer); y <= Math.ceil(me.y + outer); y++) for (let x = Math.floor(me.x - outer); x <= Math.ceil(me.x + outer); x++) {
+      if (x < 0 || y < 0 || x >= size || y >= size) continue;
+      const d = Math.hypot(x - me.x, y - me.y);
+      if (d > outer) continue;
+      const seen = Math.round(255 * Math.min(1, (outer - d) / (outer - full))), i = y * size + x;
+      if (seen <= this.worldSeen[i]!) continue;
+      this.worldSeen[i] = seen;
+      this.paintWorld(i);
+      this.worldDirty = this.worldUnsaved = true;
     }
-    ctx.putImageData(img, 0, 0);
-    return canvas;
+  }
+
+  private paintWorld(i: number): void {
+    const c = this.worldColors!.data;
+    this.worldFogData!.data.set([c[i * 4]!, c[i * 4 + 1]!, c[i * 4 + 2]!, this.worldSeen[i]!], i * 4);
+  }
+
+  private exploredPercent(): number {
+    let n = 0;
+    for (const v of this.worldSeen) if (v > 128) n++;
+    return Math.floor((n / Math.max(1, this.worldSeen.length)) * 100);
+  }
+
+  /** Salva no navegador de tempos em tempos (só se mudou). Sem armazenamento disponível, só não salva. */
+  private saveWorldFog(): void {
+    if (!this.worldUnsaved || performance.now() / 1000 - this.saveTimer < Minimap.SAVE_EVERY) return;
+    this.saveTimer = performance.now() / 1000;
+    this.worldUnsaved = false;
+    try {
+      let bin = '';
+      for (const v of this.worldSeen) bin += String.fromCharCode(v);
+      localStorage.setItem(Minimap.SAVE_KEY, btoa(bin));
+    } catch { /* modo privado ou armazenamento bloqueado */ }
+  }
+
+  private static loadWorldFog(length: number): Uint8Array | null {
+    try {
+      const saved = localStorage.getItem(Minimap.SAVE_KEY);
+      if (!saved) return null;
+      const bin = atob(saved);
+      if (bin.length !== length) return null; // tamanho do mapa mudou: começa de novo
+      return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+    } catch { return null; }
   }
 
   /** Masmorra nova: zera a névoa. */

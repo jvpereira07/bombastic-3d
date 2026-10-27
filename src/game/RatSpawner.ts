@@ -13,8 +13,8 @@ export class RatSpawner {
   constructor(private readonly game: Game) {}
 
   populate(): void {
-    for (let i = 0; i < 12; i++) this.spawn('overworld');
-    for (let i = 0; i < 3; i++) this.spawnTroupe('overworld');
+    for (let i = 0; i < 24; i++) this.spawn('overworld');
+    for (let i = 0; i < 5; i++) this.spawnTroupe('overworld');
     this.populateSewer();
   }
 
@@ -29,7 +29,7 @@ export class RatSpawner {
     if (zone === 'sewer') ({ x, z } = this.game.world.sewer.randomFloor());
     else {
       const player = this.game.player.pos;
-      do { x = rnd(-70, 70); z = rnd(-70, 70); } while (Math.hypot(x - player.x, z - player.z) < RatSpawner.SAFE_DISTANCE);
+      do { x = rnd(-140, 140); z = rnd(-140, 140); } while (Math.hypot(x - player.x, z - player.z) < RatSpawner.SAFE_DISTANCE);
     }
     if (!this.game.maySpawnAt(x, z)) return;
     const size = Math.round(rnd(...CUCARACHA.TROUPE));
@@ -47,7 +47,7 @@ export class RatSpawner {
     }
     const player = this.game.player.pos;
     let x: number, z: number;
-    do { x = rnd(-80, 80); z = rnd(-80, 80); } while (Math.hypot(x - player.x, z - player.z) < RatSpawner.SAFE_DISTANCE);
+    do { x = rnd(-160, 160); z = rnd(-160, 160); } while (Math.hypot(x - player.x, z - player.z) < RatSpawner.SAFE_DISTANCE);
     if (this.game.maySpawnAt(x, z)) this.game.spawn(new Rat(this.game, x, z));
   }
 

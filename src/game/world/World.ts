@@ -15,7 +15,7 @@ export type WorldMode = 'normal' | 'test';
 
 type Atmosphere = { sky: number; fog: number; near: number; far: number };
 const ATMOSPHERE: Record<Zone, Atmosphere> = {
-  overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 90, far: 215 }, // termina antes da borda dos shards visíveis
+  overworld: { sky: 0x8fd3ff, fog: 0xbfe6ff, near: 55, far: 165 }, // termina antes da borda dos shards visíveis
   sewer: { sky: 0x0d1410, fog: 0x0d1410, near: 8, far: 45 },
 };
 const TEST_ATMOSPHERE: Atmosphere = { sky: 0xffffff, fog: 0xffffff, near: 60, far: 160 };
@@ -25,7 +25,8 @@ export class World implements CameraWorld {
   readonly sewer: Sewer;
   readonly manholes: ManholeCover[];
   readonly shards: ShardManager;
-  private readonly fog = new THREE.Fog(0xbfe6ff, 90, 215);
+  private readonly overworld: Overworld | null = null;
+  private readonly fog = new THREE.Fog(0xbfe6ff, 55, 165);
   private readonly sky = new THREE.Color(0x8fd3ff);
 
   /** Tampa do esgoto no mundo de cima (marcada no minimapa). */
@@ -46,7 +47,10 @@ export class World implements CameraWorld {
     this.vendorSpots = mode === 'normal' ? VENDOR.SPOTS.map(([x, z]) => Overworld.flattestNear(x, z)) : [];
     const groups = new Map<ShardId, THREE.Object3D>();
     if (mode === 'test') new TestArena(scene);
-    else for (const [id, group] of new Overworld(scene, assets, anisotropy, [surfaceLid, ...this.vendorSpots]).shards) groups.set(id, group);
+    else {
+      this.overworld = new Overworld(scene, assets, anisotropy, [surfaceLid, ...this.vendorSpots]);
+      for (const [id, group] of this.overworld.shards) groups.set(id, group);
+    }
     const sewerGroup = new THREE.Group();
     sewerGroup.name = `shard ${SHARD.SEWER}`;
     scene.add(sewerGroup);
@@ -102,5 +106,8 @@ export class World implements CameraWorld {
     this.manholes[1]!.relocate(this.sewer.exitLid);
   }
 
-  update(dt: number, focus: THREE.Vector3): void { this.sewer.update(dt, focus); }
+  update(dt: number, focus: THREE.Vector3): void {
+    this.sewer.update(dt, focus);
+    this.overworld?.update(focus);
+  }
 }

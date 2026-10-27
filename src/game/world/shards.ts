@@ -11,7 +11,7 @@ import { OVERWORLD, SEWER } from '../config';
 export type ShardId = string;
 
 export const SHARD = {
-  SIZE: 55,                                  // 440 m / 8 shards por lado
+  SIZE: 55,                                  // 770 m / 14 shards por lado
   PER_SIDE: Math.round(OVERWORLD.SIZE / 55),
   WORLD_SEED: 0xb0b5,
   VIEW_RADIUS: 4,                            // shards desenhados em volta do jogador (anel de Chebyshev)
