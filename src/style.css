@@ -221,3 +221,5 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 #debug { position: fixed; top: calc(170px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); z-index: 7; margin: 0;
   max-width: min(560px, calc(100% - 24px)); padding: 8px 10px; background: #2a1206d9; color: var(--paper); border: 2px solid var(--ink);
   border-radius: 6px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; pointer-events: none; }
+#debug pre { margin: 0; font: inherit; white-space: pre-wrap; }
+#debug canvas { display: block; width: 240px; height: 56px; margin-bottom: 6px; background: #ffffff14; image-rendering: pixelated; }
