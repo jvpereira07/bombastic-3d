@@ -55,7 +55,7 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
   background: #2a120699; animation: ui-fade .12s ease-out; }
 .ui-panel { width: 100%; max-height: calc(100dvh - 32px); overflow: auto; background: var(--card); color: var(--ink);
   border: 4px solid var(--ink); border-radius: 20px; box-shadow: var(--shadow-lg); padding: 18px; animation: ui-pop .18s cubic-bezier(.3, 1.6, .5, 1); }
-.ui-panel.sm { max-width: 360px; } .ui-panel.md { max-width: 540px; } .ui-panel.lg { max-width: 720px; }
+.ui-panel.sm { max-width: 360px; } .ui-panel.md { max-width: 540px; } .ui-panel.lg { max-width: 720px; } .ui-panel.xl { max-width: 1040px; }
 .ui-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .ui-header h2 { margin: 0; font: 700 24px var(--font); letter-spacing: -.5px; }
 .ui-header p { margin: 2px 0 0; font-weight: 600; font-size: 13px; opacity: .65; }
@@ -106,7 +106,8 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 .ui-slot kbd { position: absolute; left: -6px; top: -8px; }
 
 /* inventário */
-.inv-layout { display: grid; grid-template-columns: 1fr 240px; gap: 20px; }
+/* três colunas lado a lado (equipado | mochila | detalhes) para caber na altura da tela sem rolar */
+.inv-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 230px; gap: 20px; align-items: start; }
 .inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .inv-doll { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; }
 .inv-col { display: flex; flex-direction: column; gap: 10px; }
@@ -114,7 +115,7 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 .inv-gear { display: flex; flex-direction: column; align-items: center; gap: 2px; font: 700 11px var(--font); }
 .inv-gear .ui-slot { width: 56px; flex: none; }
 /* jogador no centro: corpo e chapéu empilhados, pixel art ampliada */
-.inv-figure { position: relative; height: 100%; min-height: 220px; border: var(--line); border-radius: 12px; background: var(--blue);
+.inv-figure { position: relative; height: 100%; min-height: 200px; border: var(--line); border-radius: 12px; background: var(--blue);
   background-image: radial-gradient(#ffffff55 2px, transparent 2px), linear-gradient(transparent 70%, #00000022 70%); background-size: 14px 14px, 100% 100%; }
 .inv-figure .ui-icon { position: absolute; left: 50%; top: 48%; width: min(92%, 230px); height: auto; aspect-ratio: 1; transform: translate(-50%, -50%);
   image-rendering: pixelated; filter: drop-shadow(4px 4px 0 #00000040); } /* quadro do sprite é quadrado (32x32) */
@@ -128,6 +129,13 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 .inv-desc { margin: 0; font-weight: 500; line-height: 1.4; }
 .inv-empty { text-align: center; padding: 20px 4px; } .inv-empty p { margin: 6px 0 0; font-weight: 500; opacity: .7; }
 
+@media (max-width: 940px) {
+  /* duas colunas: equipado à esquerda; mochila e detalhes empilhados à direita */
+  .inv-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .inv-layout > :first-child { grid-row: span 2; }
+  .inv-preview { aspect-ratio: 2 / 1; }
+  .inv-grid { grid-template-columns: repeat(6, 1fr); gap: 8px; }
+}
 @media (max-width: 600px) {
   .inv-layout { grid-template-columns: 1fr; }
   .inv-grid { gap: 10px; }

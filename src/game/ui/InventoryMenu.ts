@@ -22,7 +22,7 @@ export class InventoryMenu extends Modal {
   private selected: ItemId | null = null;
 
   constructor(private readonly player: Player, private readonly assets: Assets) {
-    super('Inventário', 'Tab ou I fecha · clique num slot vestido para ver o item · duas armas: a da mão vai na mão, a outra nas costas', 'lg');
+    super('Inventário', 'Tab ou I fecha · clique duplo veste ou tira · duas armas: a da mão vai na mão, a outra nas costas', 'xl');
     const grid = h('div', { className: 'inv-grid' });
     for (let i = 0; i < InventoryMenu.SLOTS; i++) {
       const slot = new Slot();
@@ -48,9 +48,8 @@ export class InventoryMenu extends Modal {
       h('div', { className: 'inv-col' }, ...hands));
     const accessories = h('div', { className: 'inv-accessories' }, ...ACCESSORY_SLOTS.map((k, i) => gearSlot(k, `Acessório ${i + 1}`)));
     this.body.append(h('div', { className: 'inv-layout' },
-      h('div', {},
-        h('h3', { className: 'ui-label', text: 'Equipado' }), doll, accessories,
-        h('h3', { className: 'ui-label', text: 'Mochila' }), grid),
+      h('div', {}, h('h3', { className: 'ui-label', text: 'Equipado' }), doll, accessories),
+      h('div', {}, h('h3', { className: 'ui-label', text: 'Mochila' }), grid),
       this.details));
     player.inventory.onChange(() => { if (this.open) this.refresh(); });
   }

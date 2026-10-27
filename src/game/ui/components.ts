@@ -96,7 +96,7 @@ export class Modal {
   protected readonly panel = h('section', { className: 'ui-panel', attrs: { role: 'dialog', 'aria-modal': 'true' } });
   protected readonly body = h('div', { className: 'ui-body' });
 
-  constructor(title: string, subtitle = '', size: 'sm' | 'md' | 'lg' = 'md') {
+  constructor(title: string, subtitle = '', size: 'sm' | 'md' | 'lg' | 'xl' = 'md') {
     this.panel.classList.add(size);
     const close = h('button', { className: 'ui-close', text: '✕', attrs: { type: 'button', 'aria-label': 'Fechar' } });
     close.addEventListener('click', () => this.toggle(false));
