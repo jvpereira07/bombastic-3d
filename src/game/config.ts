@@ -67,3 +67,20 @@ export const BOSS = {
 
 /** Linhas de todas as folhas de personagens. */
 export const ROW = { BACK: 0, LEFT: 1, FRONT: 2, RIGHT: 3 } as const;
+
+/** Moedas que os inimigos derrubam ao morrer (quantidade sorteada entre MIN e MAX) e o ímã que puxa para o jogador. */
+export const COIN = {
+  DROP: { rat: [1, 2], gator: [3, 5], cucaracha: [1, 3] } as Record<'rat' | 'gator' | 'cucaracha', readonly [number, number]>,
+  MAGNET: 3.5, PICK: 0.9, SPEED: 14,
+} as const;
+
+/**
+ * Vendedores de poção em barraquinhas pelo mundo de cima. TALK = distância para falar (E);
+ * OFFERS = pacotes de poções e preço em moedas; SPOTS = onde ficam as barracas (x, z);
+ * vazio por enquanto (barracas desligadas). Lugares testados: [14, -12], [-62, 34], [58, 44], [-26, -70].
+ */
+export const VENDOR = {
+  TALK: 3.6, SPRITE_SIZE: 3.2, FRAMES: 10, FPS: 8,
+  OFFERS: [{ potions: 1, price: 10 }, { potions: 3, price: 25 }, { potions: 5, price: 40 }],
+  SPOTS: [] as readonly (readonly [number, number])[],
+} as const;

@@ -242,3 +242,24 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
   border-radius: 6px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; pointer-events: none; }
 #debug pre { margin: 0; font: inherit; white-space: pre-wrap; }
 #debug canvas { display: block; width: 240px; height: 56px; margin-bottom: 6px; background: #ffffff14; image-rendering: pixelated; }
+
+/* ---------- moedas e loja do vendedor ---------- */
+#coins { position: fixed; top: calc(60px + env(safe-area-inset-top, 0px)); right: max(14px, env(safe-area-inset-right, 0px)); z-index: 3; pointer-events: none;
+  display: flex; align-items: center; gap: 6px; padding: 4px 12px 4px 6px; background: var(--card); color: var(--ink); border: var(--line);
+  border-radius: 999px; box-shadow: var(--shadow); font: 700 16px var(--font); }
+#coins img { width: 24px; height: 24px; image-rendering: pixelated; }
+.shop-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+.shop-portrait { flex: none; width: 96px; height: 96px; border: var(--line); border-radius: 12px; background: var(--blue);
+  background-image: radial-gradient(#ffffff55 2px, transparent 2px); background-size: 14px 14px; display: grid; place-items: center; }
+.shop-portrait .ui-icon { width: 92px; height: 92px; image-rendering: pixelated; }
+.shop-say { margin: 0 0 8px; font: 600 15px/1.4 'Trebuchet MS', system-ui, sans-serif; }
+.shop-say::before { content: '“'; } .shop-say::after { content: '”'; }
+.shop-wallet { display: flex; align-items: center; gap: 6px; font: 700 16px var(--font); }
+.shop-wallet .ui-icon, .shop-price .ui-icon, .shop-item .ui-icon { width: 24px; height: 24px; flex: none; image-rendering: pixelated; }
+.shop-wallet .ui-badge { margin-left: auto; }
+.shop-list { display: flex; flex-direction: column; gap: 10px; }
+.shop-offer { display: grid; grid-template-columns: 1fr auto 140px; align-items: center; gap: 12px; padding: 8px 10px;
+  background: var(--paper); border: var(--line); border-radius: 12px; }
+.shop-item, .shop-price { display: flex; align-items: center; gap: 8px; font: 700 15px var(--font); }
+.shop-item .ui-icon { width: 36px; height: 36px; }
+@media (max-width: 600px) { .shop-offer { grid-template-columns: 1fr auto; } .shop-offer .ui-btn { grid-column: 1 / -1; } }

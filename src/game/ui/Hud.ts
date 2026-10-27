@@ -17,7 +17,9 @@ export interface HudState {
   potions: number; hasHat: boolean;
   hands: readonly (Weapon | null)[]; activeHand: number;
   boss: { visible: boolean; hp: number; maxHp: number };
-  showManholePrompt: boolean;
+  /** Ação do E disponível agora (vendedor, tampa do esgoto) ou null. */
+  prompt: string | null;
+  coins: number;
   /** Etapa do combo (0 a 2) ou -1 fora de combo. */
   comboStage: number;
 }
@@ -36,6 +38,7 @@ export class Hud {
   private readonly bossFill = $('#boss i');
   private readonly banner = $('#banner');
   private readonly prompt = $('#prompt');
+  private readonly coins = $('#coinN');
   private readonly hint = $('#hint');
   private readonly online = $('#online');
   private readonly combo = $('#combo');
@@ -50,6 +53,7 @@ export class Hud {
     $('#stBar').style.backgroundImage = `url(${assets.url('ui_st_empty')})`;
     this.stFill.style.backgroundImage = `url(${assets.url('ui_st_full')})`;
     $<HTMLImageElement>('#potImg').src = assets.url(ITEMS.potion.icon);
+    $<HTMLImageElement>('#coinImg').src = assets.url('moeda');
     $<HTMLImageElement>('#hatImg').src = assets.url(ITEMS.sombrero.icon);
     this.weaponIcons = { sword: assets.url(ITEMS.sword.icon), maraca: assets.url(ITEMS.maraca.icon), bow: assets.url(ITEMS.bow.icon) };
   }
@@ -87,7 +91,9 @@ export class Hud {
     });
     this.bossPanel.hidden = !s.boss.visible;
     this.bossFill.style.width = `${(s.boss.hp / s.boss.maxHp) * 100}%`;
-    this.prompt.hidden = !s.showManholePrompt;
+    this.prompt.hidden = !s.prompt;
+    if (s.prompt && this.prompt.textContent !== s.prompt) this.prompt.textContent = s.prompt;
+    if (this.coins.textContent !== String(s.coins)) this.coins.textContent = String(s.coins);
     if (s.comboStage !== this.lastCombo) {
       this.lastCombo = s.comboStage;
       this.combo.hidden = s.comboStage < 0;

@@ -30,6 +30,8 @@ export class Player extends Entity {
   readonly dir = new THREE.Vector2(0, 1);
   readonly inventory = new Inventory();
   hp: number = PLAYER.MAX_HP;
+  /** Moedas (derrubadas pelos inimigos, gastas com os vendedores). */
+  coins = 0;
   stamina: number = PLAYER.MAX_STAMINA;
   vy = 0;
 
@@ -179,6 +181,18 @@ export class Player extends Entity {
   heal(amount: number): boolean {
     if (this.hp >= PLAYER.MAX_HP) return false;
     this.hp = Math.min(PLAYER.MAX_HP, this.hp + amount);
+    return true;
+  }
+
+  addCoins(n: number): void {
+    this.coins += n;
+    this.game.sfx.coin();
+  }
+
+  /** Gasta moedas se tiver o suficiente; devolve se pagou. */
+  spendCoins(n: number): boolean {
+    if (this.coins < n) return false;
+    this.coins -= n;
     return true;
   }
 

@@ -74,6 +74,23 @@ export class Overworld {
     return h + (w.beach > 0.5 ? 0 : wall);                      // paredão nas bordas, menos no mar
   }
 
+  /**
+   * Ponto mais plano (menor diferença de altura num raio de `footprint` m) numa busca em grade de
+   * até `search` m em volta de (x, z), fora do mar. Usado para assentar construções como as barracas.
+   */
+  static flattestNear(x: number, z: number, search = 12, footprint = 2.5): THREE.Vector3 {
+    let best = new THREE.Vector3(x, 0, z), bestSpread = Infinity;
+    for (let dx = -search; dx <= search; dx += 1.5) for (let dz = -search; dz <= search; dz += 1.5) {
+      const cx = x + dx, cz = z + dz, ys: number[] = [];
+      for (let a = 0; a < 8; a++) ys.push(Overworld.height(cx + Math.cos(a * Math.PI / 4) * footprint, cz + Math.sin(a * Math.PI / 4) * footprint));
+      ys.push(Overworld.height(cx, cz));
+      if (Math.min(...ys) < OVERWORLD.SEA_Y + 0.5) continue;
+      const spread = Math.max(...ys) - Math.min(...ys) + Math.hypot(dx, dz) * 0.01; // empate: o mais perto do pedido
+      if (spread < bestSpread) { bestSpread = spread; best = new THREE.Vector3(cx, 0, cz); }
+    }
+    return best;
+  }
+
   static contains(x: number): boolean { return Math.abs(x) <= OVERWORLD.SIZE; }
 
   /** Um grupo por shard: liga/desliga a visibilidade de terreno + cenário daquele pedaço de uma vez. */
@@ -258,7 +275,7 @@ diffuseColor.rgb *= (ground(ground0) * vSplat.x * vec3(1.15, 1.45, 0.9) + ground
       const p = spot(), r = rng();
       if (!p) continue;
       const { x, z } = p;
-      if (Math.hypot(x, z) < 6 || keepClear.some((c) => Math.hypot(x - c.x, z - c.z) < 3)) continue;
+      if (Math.hypot(x, z) < 6 || keepClear.some((c) => Math.hypot(x - c.x, z - c.z) < 5)) continue;
       if (Overworld.height(x, z) < OVERWORLD.SEA_Y + 0.3) continue; // nada dentro do mar
       switch (Overworld.biome(x, z)) {
         case 'desert':

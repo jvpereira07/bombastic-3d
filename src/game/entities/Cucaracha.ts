@@ -44,7 +44,7 @@ export class Cucaracha extends Actor {
     this.vy = 6; this.knockback.copy(direction).setY(0);
     if (this.state === 'wander') this.state = 'circle';
     this.game.sfx.hit();
-    if (this.hp <= 0) this.dying = 0.4;
+    if (this.hp <= 0) { this.dying = 0.4; this.game.dropCoins('cucaracha', this.pos.x, this.pos.z); }
   }
 
   update(dt: number): void {

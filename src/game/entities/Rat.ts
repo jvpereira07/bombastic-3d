@@ -42,6 +42,7 @@ export class Rat extends Actor {
     if (this.hp <= 0) {
       this.dying = 0.4;
       if (Math.random() < RAT.POTION_DROP) this.game.dropItem('potion', this.pos.x, this.pos.z);
+      this.game.dropCoins('rat', this.pos.x, this.pos.z);
     }
   }
 

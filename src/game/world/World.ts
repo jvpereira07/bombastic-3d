@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Assets } from '../../engine/Assets';
 import type { CameraWorld } from '../../engine/ThirdPersonCamera';
 import { clamp } from '../../engine/math';
-import { OVERWORLD, SEWER } from '../config';
+import { OVERWORLD, SEWER, VENDOR } from '../config';
 import { ManholeCover } from './ManholeCover';
 import { Overworld } from './Overworld';
 import { Sewer } from './Sewer';
@@ -30,6 +30,8 @@ export class World implements CameraWorld {
 
   /** Tampa do esgoto no mundo de cima (marcada no minimapa). */
   readonly surfaceLid = new THREE.Vector3(5, 0, 8);
+  /** Onde ficam as barracas dos vendedores: o ponto mais plano perto de cada VENDOR.SPOTS (vazio no mundo de testes). */
+  readonly vendorSpots: THREE.Vector3[];
 
   constructor(private readonly scene: THREE.Scene, assets: Assets, anisotropy: number, readonly mode: WorldMode = 'normal') {
     scene.background = this.sky;
@@ -41,9 +43,10 @@ export class World implements CameraWorld {
     scene.add(sun);
 
     const surfaceLid = this.surfaceLid;
+    this.vendorSpots = mode === 'normal' ? VENDOR.SPOTS.map(([x, z]) => Overworld.flattestNear(x, z)) : [];
     const groups = new Map<ShardId, THREE.Object3D>();
     if (mode === 'test') new TestArena(scene);
-    else for (const [id, group] of new Overworld(scene, assets, anisotropy, [surfaceLid]).shards) groups.set(id, group);
+    else for (const [id, group] of new Overworld(scene, assets, anisotropy, [surfaceLid, ...this.vendorSpots]).shards) groups.set(id, group);
     const sewerGroup = new THREE.Group();
     sewerGroup.name = `shard ${SHARD.SEWER}`;
     scene.add(sewerGroup);

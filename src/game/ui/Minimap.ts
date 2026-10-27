@@ -101,7 +101,7 @@ export class Minimap {
       ({ x: (x + OVERWORLD.HALF) / Minimap.WORLD_M_PER_PX - 0.5, y: (z + OVERWORLD.HALF) / Minimap.WORLD_M_PER_PX - 0.5 });
     const lid = world.surfaceLid;
     this.draw('Mapa do mundo', this.overworld, toPx(player.pos.x, player.pos.z), Minimap.WORLD_M_PER_PX, // 1 px por metro, como no esgoto
-      [{ p: toPx(lid.x, lid.z), color: '#9fd36a', r: 1.5 }]);
+      [{ p: toPx(lid.x, lid.z), color: '#9fd36a', r: 1.5 }, ...this.game.vendors.map((v) => ({ p: toPx(v.pos.x, v.pos.z), color: '#ffd23a', r: 1.5 }))]);
   }
 
   /** Uma amostra do terreno a cada WORLD_M_PER_PX metros. */

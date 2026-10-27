@@ -11,7 +11,7 @@ import { MusicNote } from './boss/MusicNote';
 import { MrKabumstic } from './boss/MrKabumstic';
 import { Paratrooper } from './boss/Paratrooper';
 import { RatPlane } from './boss/RatPlane';
-import { BOSS, PLAYER } from './config';
+import { BOSS, COIN, PLAYER } from './config';
 import { BombRat } from './entities/BombRat';
 import type { Entity, Hittable } from './entities/Entity';
 import { Explosion } from './entities/Explosion';
@@ -33,6 +33,9 @@ import { Emotes } from './ui/Emotes';
 import { Minimap } from './ui/Minimap';
 import { BowReticle } from './ui/BowReticle';
 import { DebugOverlay } from './ui/DebugOverlay';
+import { Coin } from './entities/Coin';
+import { Vendor } from './entities/Vendor';
+import { ShopMenu } from './ui/ShopMenu';
 import type { Hud } from './ui/Hud';
 import { NetClient } from '../net/NetClient';
 import { NET } from '../net/protocol';
@@ -72,6 +75,9 @@ export class Game {
   readonly lockOn: LockOn;
   readonly emotes: Emotes;
   private readonly minimap: Minimap;
+  /** Barracas de poção no mundo de cima (nenhuma no mundo de testes). */
+  readonly vendors: Vendor[];
+  private shop!: ShopMenu;
   private readonly bowReticle: BowReticle;
   private readonly debug: DebugOverlay;
   private readonly damageNumbers: DamageNumbers;
@@ -88,6 +94,7 @@ export class Game {
     this.player = new Player(this);
     this.boss = new MrKabumstic(this);
     this.remotes = new RemotePlayers(this.scene, assets);
+    this.vendors = this.world.vendorSpots.map((s) => new Vendor(this.scene, assets, s.x, s.z, new THREE.Vector3(0, 0, 0), this.world.groundAt));
     this.camera.snapTo(this.player.pos.clone().setY(1.8));
     this.lockOn = new LockOn(this);
     this.emotes = new Emotes(engine.camera);
@@ -162,6 +169,12 @@ export class Game {
 
   dropItem(item: ItemId, x: number, z: number): void { this.spawn(new Pickup(this, item, x, z)); }
 
+  /** Moedas que um inimigo derruba ao morrer (quantidade sorteada em COIN.DROP). */
+  dropCoins(from: keyof typeof COIN.DROP, x: number, z: number): void {
+    const [min, max] = COIN.DROP[from], n = min + Math.floor(Math.random() * (max - min + 1));
+    for (let i = 0; i < n; i++) this.spawn(new Coin(this, x, z));
+  }
+
   hittables(): Hittable[] {
     const targets: Hittable[] = this.entities.filter((e): e is Rat | BombRat | Gator | Cucaracha =>
       e instanceof Rat || e instanceof BombRat || e instanceof Gator || e instanceof Cucaracha);
@@ -212,6 +225,7 @@ export class Game {
     this.boss.update(dt);
     this.removeDead();
     this.world.update(dt, this.player.pos);
+    for (const v of this.vendors) v.update(dt);
     if (this.net?.connected && (this.netTimer -= dt) <= 0) {
       this.netTimer = 1 / NET.TICK_HZ;
       this.net.sendState(this.player.netState());
@@ -241,7 +255,8 @@ export class Game {
       hp: this.player.hp, maxHp: PLAYER.MAX_HP, stamina: this.player.stamina, maxStamina: PLAYER.MAX_STAMINA,
       potions: this.player.inventory.count('potion'), hasHat: this.player.inventory.hasLayer('hat'), hands: this.player.hands, activeHand: this.player.activeHand,
       boss: { visible: this.boss.fighting, hp: this.boss.hp, maxHp: BOSS.HP },
-      showManholePrompt: !this.player.dead && this.world.manholeNear(p) !== undefined,
+      coins: this.player.coins,
+      prompt: this.player.dead ? null : this.vendorNear() ? 'E · falar com o vendedor' : this.world.manholeNear(p) ? 'E · usar a tampa do esgoto' : null,
       comboStage: this.player.comboStage,
     });
   }
@@ -269,6 +284,17 @@ export class Game {
     if (!dead.length) return;
     for (const e of dead) e.dispose();
     this.entities = this.entities.filter((e) => e.alive);
+  }
+
+  /** Vendedor cujo balcão está ao alcance do jogador. */
+  vendorNear(): Vendor | undefined { return this.vendors.find((v) => v.canTalk(this.player.pos)); }
+
+  /** E: fala com o vendedor ao lado; senão usa a tampa do esgoto. */
+  private interact(): void {
+    if (this.shop.open) { this.shop.toggle(false); return; }
+    if (Modal.anyOpen || this.player.dead) return;
+    if (this.vendorNear()) { this.shop.toggle(true); return; }
+    this.useManhole();
   }
 
   private useManhole(): void {
@@ -319,7 +345,7 @@ export class Game {
     input.onKey(['Digit2'], () => player.selectHand(1));
     input.onKey(['ShiftLeft', 'ShiftRight'], () => player.dash());
     input.onKey(['KeyG'], () => player.switchWeapon());
-    input.onKey(['KeyE'], () => this.useManhole());
+    input.onKey(['KeyE'], () => this.interact(), true);
     input.onKey(['KeyT'], () => this.lockOn.toggle());
     input.onAltClick(() => this.lockOn.toggle());
     const toggleMute = (): boolean => { const muted = this.audio.toggleMute(); this.hud.setMuted(muted); return muted; };
@@ -328,6 +354,7 @@ export class Game {
 
     input.blocked = () => Modal.anyOpen;
     const inventory = new InventoryMenu(player, this.assets);
+    this.shop = new ShopMenu(player, this.assets, this.sfx);
     const pause = new PauseMenu({ inventory: () => inventory.toggle(true), toggleMute, muted: () => this.audio.isMuted });
     input.onKey(['Tab', 'KeyI'], () => { if (!pause.open) inventory.toggle(); }, true);
     input.onKey(['KeyP'], () => (Modal.anyOpen && !pause.open ? Modal.closeAll() : pause.toggle()), true);

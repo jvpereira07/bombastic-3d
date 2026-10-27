@@ -38,7 +38,7 @@ export class Gator extends Actor {
     if (this.forwardHit(direction)) return;
     this.hp -= damage; this.hurtTimer = 0.15;
     this.game.sfx.hit();
-    if (this.hp <= 0) this.dying = 0.5;
+    if (this.hp <= 0) { this.dying = 0.5; this.game.dropCoins('gator', this.pos.x, this.pos.z); }
   }
 
   kill(): void { this.alive = false; }

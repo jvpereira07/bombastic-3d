@@ -47,6 +47,9 @@ export class Sfx {
   }
   potion(): void { this.arpeggio([392, 523, 659, 784], 'square', 0.09, 0.12, 0.06); }
   pickup(): void { this.arpeggio([660, 880, 1320], 'square', 0.08, 0.12, 0.07); }
+  coin(): void { this.arpeggio([1318, 1760], 'square', 0.06, 0.08, 0.05); }
+  buy(): void { this.arpeggio([523, 784, 1046, 1568], 'triangle', 0.1, 0.14, 0.06); }
+  denied(): void { this.audio.tone({ f: 220, f2: 140, type: 'square', dur: 0.18, vol: 0.12 }); }
   hat(): void { this.arpeggio([523, 659, 784, 1046, 1318], 'triangle', 0.14, 0.16, 0.08); }
   dash(): void { this.audio.noise({ dur: 0.22, freq: 600, f2: 3500, vol: 0.2, q: 0.6 }); }
   jump(): void { this.audio.tone({ f: 280, f2: 620, type: 'square', dur: 0.12, vol: 0.09 }); }
