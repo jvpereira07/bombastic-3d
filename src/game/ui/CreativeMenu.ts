@@ -30,6 +30,9 @@ export class CreativeMenu extends Modal {
       { label: 'Maraca', icon: 'maraca', run: (p) => game.dropItem('maraca', p.x, p.z) },
       { label: 'Arco', icon: 'bow', run: (p) => game.dropItem('bow', p.x, p.z) },
       { label: 'Chapéu', icon: 'sombrero', run: (p) => game.dropItem('sombrero', p.x, p.z) },
+      { label: 'Bota das Águas', icon: 'bota_agua', run: (p) => game.dropItem('waterBoots', p.x, p.z) },
+      { label: 'Bota Alada', icon: 'bota_alada', run: (p) => game.dropItem('wingBoots', p.x, p.z) },
+      { label: 'Bota Trampolim', icon: 'bota_mola', run: (p) => game.dropItem('springBoots', p.x, p.z) },
     ];
     const actions: Entry[] = [
       { label: 'Curar', run: () => game.player.heal(Infinity) },

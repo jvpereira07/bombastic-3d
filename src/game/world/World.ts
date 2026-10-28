@@ -82,6 +82,12 @@ export class World implements CameraWorld {
     p.z = clamp(p.z, -OVERWORLD.HALF, OVERWORLD.HALF);
   }
 
+  /** Nível da água sob `p` (canal do esgoto ou mar/rio/lago da superfície), ou null onde não há água. */
+  waterLevel(p: THREE.Vector3): number | null {
+    const level = Sewer.contains(p.x) ? SEWER.WATER_Y : this.mode === 'normal' ? OVERWORLD.SEA_Y : null;
+    return level !== null && this.groundAt(p.x, p.z) < level ? level : null;
+  }
+
   /** Na água rasa (canal do esgoto ou mar da praia) anda devagar. */
   isWading(p: THREE.Vector3): boolean {
     if (Sewer.contains(p.x)) return p.y < SEWER.WATER_Y + 0.05;

@@ -370,6 +370,9 @@ export class Game {
     this.dropItem('sombrero', 0, -4);
     this.dropItem('maraca', 3, -4);
     this.dropItem('bow', 6, -4);
+    this.dropItem('waterBoots', -3, -7);
+    this.dropItem('wingBoots', 0, -7);
+    this.dropItem('springBoots', 3, -7);
     this.spawn(new Gator(this, TestArena.RIVER_X, 0));
     this.input.onKey(['KeyR'], () => {
       const a = Math.random() * Math.PI * 2, p = this.player.pos;
@@ -399,5 +402,8 @@ export class Game {
     this.dropItem('sombrero', best.x, best.z);
     this.dropItem('maraca', -6, 5);
     this.dropItem('bow', 7, 6);
+    this.dropItem('waterBoots', -8, -3);
+    this.dropItem('wingBoots', -4, 8);
+    this.dropItem('springBoots', 9, -2);
   }
 }

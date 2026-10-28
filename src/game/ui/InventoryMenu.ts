@@ -1,5 +1,6 @@
 import type { Assets } from '../../engine/Assets';
 import { ROW } from '../config';
+import { bootCanvas } from '../entities/bootSprites';
 import type { Hand, Player } from '../entities/Player';
 import { ACCESSORY_SLOTS, ARMOR_SLOTS, type GearSlot } from '../items/Inventory';
 import { ITEMS, type ItemId, type Weapon } from '../items/items';
@@ -105,11 +106,23 @@ export class InventoryMenu extends Modal {
     this.renderDetails();
   }
 
-  /** O jogador de frente, com o chapéu se estiver vestido. */
+  /** Imagem (data URL) da camada de cada bota sobre a folha de andar, feita uma vez. */
+  private readonly bootUrls = new Map<ItemId, string>();
+
+  /** O jogador de frente, com o chapéu e a bota se estiverem vestidos. */
   private renderFigure(): void {
     const frame = [7, 4, 0, ROW.FRONT] as const;
     const layers = [icon(this.assets.url('player_move'), [...frame])];
     if (this.player.inventory.hasLayer('hat')) layers.push(icon(this.assets.url('hat_move'), [...frame]));
+    const feet = this.player.inventory.wornIn('feet'), item = feet ? ITEMS[feet] : null;
+    if (feet && item?.kind === 'equipment' && item.boots) {
+      let url = this.bootUrls.get(feet);
+      if (!url) {
+        url = bootCanvas(this.assets.texture('player_move').image as HTMLImageElement, item.boots).toDataURL();
+        this.bootUrls.set(feet, url);
+      }
+      layers.push(icon(url, [...frame]));
+    }
     this.figure.replaceChildren(...layers);
   }
 

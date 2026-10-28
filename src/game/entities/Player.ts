@@ -8,6 +8,7 @@ import type { Game } from '../Game';
 import { Inventory } from '../items/Inventory';
 import { ITEMS, type ItemId, type Weapon } from '../items/items';
 import { Arrow } from './Arrow';
+import { bootTexture, type BootPalette } from './bootSprites';
 import { Entity, type Hittable } from './Entity';
 import { MaracaShot } from './MaracaShot';
 import type { PlayerState, PoseSheet } from '../../net/protocol';
@@ -36,6 +37,10 @@ export class Player extends Entity {
   vy = 0;
 
   private grounded = true;
+  /** Já usou o pulo duplo (bota alada) neste voo. */
+  private airJumped = false;
+  /** O próximo pouso quica (bota trampolim): armado ao pular, gasto no quique. */
+  private bounceArmed = false;
   private knockback: THREE.Vector3 | null = null;
   private hurtTimer = 0;
   private deadTimer = 0;
@@ -69,6 +74,9 @@ export class Player extends Entity {
   private readonly dashSheets: Layered;
   private readonly body: Billboard;
   private readonly hat: Billboard;
+  /** Bota vestida, desenhada sobre os pés (folhas geradas sob demanda por pose e bota). */
+  private readonly boots: Billboard;
+  private readonly bootSheets = new Map<string, SpriteSheet>();
   private readonly shadow: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
 
   constructor(game: Game) {
@@ -83,6 +91,7 @@ export class Player extends Entity {
     this.maracaSheets = { body: new SpriteSheet(Player.maracaAttackTexture(a), 18, 4), hat: new SpriteSheet(a.texture('hat_atk'), 18, 4) };
     this.body = new Billboard(game.scene, this.move.body.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
     this.hat = new Billboard(game.scene, this.move.hat.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
+    this.boots = new Billboard(game.scene, this.move.hat.texture, PLAYER.SPRITE_SIZE, PLAYER.SPRITE_SIZE, 0.04);
     this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.7, 20),
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
     this.shadow.rotation.x = -Math.PI / 2;
@@ -107,8 +116,13 @@ export class Player extends Entity {
 
   // ---------- ações ----------
   jump(): void {
-    if (this.dead || !this.grounded) return;
-    this.vy = PLAYER.JUMP; this.grounded = false;
+    if (this.dead) return;
+    if (this.grounded) {
+      this.vy = PLAYER.JUMP; this.grounded = false; this.airJumped = false;
+      this.bounceArmed = this.inventory.hasAbility('bounce');
+    } else if (!this.airJumped && this.inventory.hasAbility('doubleJump')) {
+      this.vy = PLAYER.AIR_JUMP; this.airJumped = true;
+    } else return;
     this.game.sfx.jump();
   }
 
@@ -421,10 +435,19 @@ export class Player extends Entity {
   }
 
   private fall(dt: number): void {
-    const ground = this.game.world.groundUnder(this.pos);
+    let ground = this.game.world.groundUnder(this.pos);
+    const water = this.inventory.hasAbility('waterWalk') ? this.game.world.waterLevel(this.pos) : null;
+    if (water !== null && this.pos.y >= water - 0.3) ground = Math.max(ground, water + 0.06); // bota das águas: a água vira chão
     this.vy -= PHYSICS.GRAVITY * dt;
     this.pos.y += this.vy * dt;
-    if (this.pos.y <= ground) { this.pos.y = ground; this.vy = 0; this.grounded = true; }
+    if (this.pos.y > ground) return;
+    this.pos.y = ground;
+    if (!this.grounded && this.bounceArmed && this.vy < 0) { // bota trampolim: quica uma vez, bem mais alto
+      this.vy = PLAYER.BOUNCE; this.bounceArmed = false; this.airJumped = false;
+      this.game.sfx.jump();
+      return;
+    }
+    this.vy = 0; this.grounded = true;
   }
 
   private updateDeath(dt: number): void {
@@ -446,6 +469,20 @@ export class Player extends Entity {
       p: [r(this.pos.x), r(this.pos.y), r(this.pos.z)], d: [r(this.dir.x), r(this.dir.y)],
       sheet: this.pose.sheet, col: this.pose.col, hat: this.inventory.hasLayer('hat'), dead: this.dead,
     };
+  }
+
+  /** Folha da bota vestida para a pose atual, ou null sem bota com sprite. */
+  private bootSheet(sheet: PoseSheet, body: SpriteSheet): SpriteSheet | null {
+    const id = this.inventory.wornIn('feet'), item = id ? ITEMS[id] : null;
+    const palette: BootPalette | undefined = item?.kind === 'equipment' ? item.boots : undefined;
+    if (!id || !palette) return null;
+    const key = `${sheet}:${id}`;
+    let boots = this.bootSheets.get(key);
+    if (!boots) {
+      boots = new SpriteSheet(bootTexture(body.texture.image as HTMLCanvasElement, palette), body.cols, body.rows);
+      this.bootSheets.set(key, boots);
+    }
+    return boots;
   }
 
   private sheetsFor(sheet: PoseSheet): Layered {
@@ -475,14 +512,18 @@ export class Player extends Entity {
     sheets.hat.texture.offset.copy(sheets.body.texture.offset);
     this.body.setMap(sheets.body.texture);
     this.hat.setMap(sheets.hat.texture);
+    const boots = this.bootSheet(this.pose.sheet, sheets.body);
+    if (boots) { boots.texture.offset.copy(sheets.body.texture.offset); this.boots.setMap(boots.texture); }
+    this.boots.visible = !!boots;
 
     const flash = this.hurtTimer > 0 && Math.floor(this.hurtTimer * 20) % 2 === 0;
     const tint = this.dead ? 0x777777 : flash ? 0xff7070 : 0xffffff;
-    this.body.tint(tint); this.hat.tint(tint);
+    this.body.tint(tint); this.hat.tint(tint); this.boots.tint(tint);
     this.body.position.copy(this.pos);
     this.hat.visible = this.inventory.hasLayer('hat');
     // um fio à frente do corpo, para não brigar na profundidade
     this.hat.position.copy(this.pos).addScaledVector(this.game.engine.camera.position.clone().sub(this.pos).normalize(), 0.03);
+    this.boots.position.copy(this.pos).addScaledVector(this.game.engine.camera.position.clone().sub(this.pos).normalize(), 0.02);
 
     this.renderBack(row, tint);
 
