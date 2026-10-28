@@ -16,11 +16,15 @@ export const damp = (rate: number, dt: number): number => 1 - Math.exp(-rate * d
 /**
  * Linha da folha de sprites para uma direção no mundo, vista pela câmera.
  * Ordem das linhas em todas as folhas: 0 costas, 1 esquerda, 2 frente, 3 direita.
+ * Com `prev` (a linha atual), prefere costas/frente nas diagonais e só troca de lado com folga,
+ * para o sprite não ficar piscando entre duas linhas.
  */
-export function facingRow(dirX: number, dirZ: number, cameraYaw: number): number {
+export function facingRow(dirX: number, dirZ: number, cameraYaw: number, prev = -1): number {
   const c = Math.cos(cameraYaw), s = Math.sin(cameraYaw);
   const lx = dirX * c - dirZ * s, lz = dirX * s + dirZ * c;
-  if (Math.abs(lz) >= Math.abs(lx)) return lz < 0 ? 0 : 2;
+  // lado só quando o movimento é bem mais lateral que vertical (~65°; quem já está de lado sai em ~55°)
+  const side = prev < 0 ? 1 : prev === 1 || prev === 3 ? 1.4 : 2.2;
+  if (Math.abs(lx) <= Math.abs(lz) * side) return lz < 0 ? 0 : 2;
   return lx < 0 ? 1 : 3;
 }
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
-import { facingRow } from '../../engine/math';
+import { damp, facingRow } from '../../engine/math';
 import { isWalkable } from '../../engine/procedural/TileGrid';
 import { AIM_ASSIST, BOW, COMBO, MARACA, PHYSICS, PLAYER, WINGS } from '../config';
 import type { Game } from '../Game';
@@ -123,7 +123,10 @@ export class Player extends Entity {
   }
   /** Arma na mão agora (a ativa; se a mão estiver vazia, a outra). */
   get weapon(): Weapon { return this.hands[this.activeHand] ?? this.hands[this.activeHand === 0 ? 1 : 0] ?? 'sword'; }
-  private get row(): number { return facingRow(this.dir.x, this.dir.y, this.game.camera.yaw); }
+  /** Para onde o sprite olha: segue `dir` suavemente, para as viradas não pularem de linha. */
+  private readonly facing = new THREE.Vector2(0, 1);
+  private facingRowNow = 2;
+  private get row(): number { return this.facingRowNow; }
 
   // ---------- ações ----------
   jump(): void {
@@ -262,6 +265,9 @@ export class Player extends Entity {
 
     if (this.aim) this.updateAim(dt);
     this.aimLinger -= dt;
+    this.facing.lerp(this.dir, damp(14, dt));
+    if (this.facing.lengthSq() < 1e-4) this.facing.copy(this.dir);
+    this.facingRowNow = facingRow(this.facing.x, this.facing.y, this.game.camera.yaw, this.facingRowNow);
     const aiming = this.aim !== null || (this.aimLinger > 0 && this.weapon === 'bow');
     this.game.camera.aimZoom = aiming ? BOW.AIM_ZOOM : 1;
     this.game.camera.shoulder = aiming ? 1 : 0;
