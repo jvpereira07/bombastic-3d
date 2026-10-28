@@ -3,7 +3,7 @@ import { Billboard } from '../../engine/Billboard';
 import { SpriteSheet } from '../../engine/SpriteSheet';
 import { facingRow } from '../../engine/math';
 import { isWalkable } from '../../engine/procedural/TileGrid';
-import { AIM_ASSIST, BOW, COMBO, MARACA, PHYSICS, PLAYER } from '../config';
+import { AIM_ASSIST, BOW, COMBO, MARACA, PHYSICS, PLAYER, WINGS } from '../config';
 import type { Game } from '../Game';
 import { Inventory } from '../items/Inventory';
 import { ITEMS, type ItemId, type Weapon } from '../items/items';
@@ -70,6 +70,15 @@ export class Player extends Entity {
   private readonly bowSheets: Layered;
   /** Arma reserva desenhada nas costas. */
   private readonly back: Billboard;
+  /** Asas de Ícaro nas costas (só com elas vestidas). */
+  private readonly wings: Billboard;
+  private readonly wingSheet: SpriteSheet;
+  /** Segundos de voo que ainda restam (Asas de Ícaro). */
+  flightLeft: number = WINGS.FLIGHT;
+  /** No ar com as asas: 'fly' subindo, 'glide' planando, ou null. */
+  flightMode: 'fly' | 'glide' | null = null;
+  private flapTimer = 0;
+  private wingAnim = 0;
   private readonly backIcons: Record<Weapon, THREE.Texture>;
   private readonly dashSheets: Layered;
   private readonly body: Billboard;
@@ -99,6 +108,8 @@ export class Player extends Entity {
     this.backIcons = { sword: a.texture('sword'), maraca: a.texture('maraca'), bow: a.texture('bow') };
     for (const t of Object.values(this.backIcons)) t.magFilter = t.minFilter = THREE.NearestFilter;
     this.back = new Billboard(game.scene, this.backIcons.sword, 1.25, 1.25, 0.5);
+    this.wingSheet = new SpriteSheet(a.texture('asas_icaro_voo'), 5, 1); // batida (4) + fechada
+    this.wings = new Billboard(game.scene, this.wingSheet.texture, 3, 2, 0.5);
     this.inventory.add('sword');
     this.inventory.add('potion');
   }
@@ -221,7 +232,8 @@ export class Player extends Entity {
         const free = this.hands.indexOf(null);
         if (free >= 0) { this.hands[free] = def.weapon; this.game.hud.showBanner(`${def.name}! Aperte ${free + 1} para empunhar`); }
         else this.game.hud.showBanner(`${def.name}! Equipe pelo inventário (Tab)`);
-      } else this.game.hud.showBanner(`${def.name}! Shift para dar dash`);
+      } else if (def.grants.includes('flight')) this.game.hud.showBanner(`${def.name}! Segure Espaço no ar para voar`);
+      else this.game.hud.showBanner(`${def.name}! Shift para dar dash`);
     }
     else this.game.sfx.pickup();
     return true;
@@ -375,24 +387,42 @@ export class Player extends Entity {
     if (!reserve) return;
     this.back.setMap(this.backIcons[reserve]);
     this.back.tint(tint);
+    this.placeOnBack(this.back, 1.2, 0.3);
+    // inclinação de bainha, espelhada conforme o lado que a câmera vê
+    this.back.material.rotation = row === 1 ? 0.45 : row === 3 ? -0.45 : row === 0 ? 0.35 : -0.35;
+  }
+
+  /** Asas de Ícaro: batendo no voo, abertas planando, fechadas no chão; atrás do corpo como a arma reserva. */
+  private renderWings(row: number, tint: number): void {
+    this.wings.visible = this.inventory.hasAbility('flight') && !this.dead;
+    if (!this.wings.visible) return;
+    this.wingAnim += this.flightMode === 'fly' ? 0.25 : 0;
+    const frame = this.flightMode === 'fly' ? Math.floor(this.wingAnim) % 4 : this.flightMode === 'glide' ? 1 : 4;
+    this.wingSheet.setFrame(0, frame);
+    this.wings.tint(tint);
+    // de lado as asas aparecem mais estreitas
+    this.wings.sprite.scale.x = row === 1 || row === 3 ? 1.8 : 3;
+    this.placeOnBack(this.wings, 1.25, 0.4);
+  }
+
+  /**
+   * Põe um sprite preso às costas, seguindo para onde o jogador olha (não a câmera): a altura se mede
+   * no "para cima" da câmera (o corpo é um sprite virado para ela) e a profundidade fica presa à do corpo
+   * (`behind` atrás dele, ou à frente quando ele está de costas para a câmera), deslizando pelo raio de
+   * visão para não mudar onde aparece na tela.
+   */
+  private placeOnBack(sprite: Billboard, height: number, behind: number): void {
     const facing = new THREE.Vector3(this.dir.x, 0, this.dir.y).normalize();
     const cam = this.game.engine.camera, eye = cam.position;
     const forward = cam.getWorldDirection(new THREE.Vector3());
-    // o corpo é um sprite virado para a câmera: a altura das costas se mede no "para cima" da câmera,
-    // e o lado das costas só no "para a direita" (senão, com a câmera alta, a arma escorrega para a cintura)
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
-    const want = this.pos.clone().addScaledVector(up, 1.2).addScaledVector(right, -facing.dot(right) * 0.3);
-    // camada: atrás do corpo, a não ser que ele esteja claramente de costas para a câmera
+    const want = this.pos.clone().addScaledVector(up, height).addScaledVector(right, -facing.dot(right) * 0.3);
     const toCamera = eye.clone().sub(this.pos).setY(0).normalize();
     const inFront = facing.dot(toCamera) < -0.3;
-    // a profundidade fica presa à do corpo (±0,3), qualquer que seja a altura da câmera; desliza pelo raio
-    // de visão para não mudar onde aparece na tela
     const bodyDepth = this.pos.clone().sub(eye).dot(forward), depth = want.clone().sub(eye).dot(forward);
-    const target = bodyDepth + (inFront ? -0.3 : 0.3);
-    this.back.position.copy(eye).addScaledVector(want.sub(eye), depth > 0.1 ? target / depth : 1);
-    // inclinação de bainha, espelhada conforme o lado que a câmera vê
-    this.back.material.rotation = row === 1 ? 0.45 : row === 3 ? -0.45 : row === 0 ? 0.35 : -0.35;
+    const target = bodyDepth + (inFront ? -behind : behind);
+    sprite.position.copy(eye).addScaledVector(want.sub(eye), depth > 0.1 ? target / depth : 1);
   }
 
   /** Ataque com a maraca: corpo do pygame sem a espada + camada da maraca, na ordem de linhas do jogo. */
@@ -439,6 +469,7 @@ export class Player extends Entity {
     const water = this.inventory.hasAbility('waterWalk') ? this.game.world.waterLevel(this.pos) : null;
     if (water !== null && this.pos.y >= water - 0.3) ground = Math.max(ground, water + 0.06); // bota das águas: a água vira chão
     this.vy -= PHYSICS.GRAVITY * dt;
+    this.fly(dt, this.pos.y > ground + 0.05);
     this.pos.y += this.vy * dt;
     if (this.pos.y > ground) return;
     this.pos.y = ground;
@@ -448,6 +479,29 @@ export class Player extends Entity {
       return;
     }
     this.vy = 0; this.grounded = true;
+  }
+
+  /**
+   * Asas de Ícaro: no ar e segurando Espaço, sobe (gasta o tempo de voo); sem tempo, plana.
+   * Só empurra quando a subida do pulo já perdeu força, então o pulo normal continua igual e é prolongado.
+   */
+  private fly(dt: number, airborne: boolean): void {
+    const wings = this.inventory.hasAbility('flight');
+    if (!airborne || !wings) {
+      this.flightMode = null;
+      if (wings && !airborne) this.flightLeft = Math.min(WINGS.FLIGHT, this.flightLeft + (WINGS.FLIGHT / WINGS.RECHARGE) * dt);
+      return;
+    }
+    if (this.dead || this.dashing || !this.game.input.jumpHeld()) { this.flightMode = null; return; }
+    if (this.flightLeft > 0) {
+      this.flightMode = 'fly';
+      this.flightLeft = Math.max(0, this.flightLeft - dt);
+      if (this.vy < WINGS.RISE) this.vy = Math.min(WINGS.RISE, this.vy + (WINGS.LIFT + PHYSICS.GRAVITY) * dt);
+      if ((this.flapTimer -= dt) <= 0) { this.flapTimer = WINGS.FLAP_EVERY; this.game.sfx.flap(); }
+    } else {
+      this.flightMode = 'glide';
+      this.vy = Math.max(this.vy, -WINGS.GLIDE_FALL);
+    }
   }
 
   private updateDeath(dt: number): void {
@@ -526,6 +580,7 @@ export class Player extends Entity {
     this.boots.position.copy(this.pos).addScaledVector(this.game.engine.camera.position.clone().sub(this.pos).normalize(), 0.02);
 
     this.renderBack(row, tint);
+    this.renderWings(row, tint);
 
     const ground = this.game.world.groundAt(this.pos.x, this.pos.z), air = this.pos.y - ground;
     this.shadow.position.set(this.pos.x, ground + 0.05, this.pos.z);

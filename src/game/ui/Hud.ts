@@ -22,6 +22,8 @@ export interface HudState {
   coins: number;
   /** Etapa do combo (0 a 2) ou -1 fora de combo. */
   comboStage: number;
+  /** Asas de Ícaro: fração de voo restante e se está planando; null sem asas. */
+  flight: { ratio: number; gliding: boolean; airborne: boolean } | null;
 }
 
 /** Interface em HTML sobre o canvas, com as imagens do projeto. */
@@ -29,6 +31,9 @@ export class Hud {
   private readonly hpFill = $('#hpBar i');
   private readonly hpText = $('#hpTxt');
   private readonly stFill = $('#stBar i');
+  private readonly flyBar = $('#flyBar');
+  private readonly flyFill = $('#flyBar i');
+  private readonly flyLabel = $('#flyBar b');
   private readonly potionCount = $('#potN');
   private readonly potionSlot = $('#potSlot');
   private readonly hatSlot = $('#hatSlot');
@@ -79,6 +84,14 @@ export class Hud {
   render(s: HudState): void {
     Hud.fill(this.hpFill, HP_FILL, s.hp / s.maxHp);
     Hud.fill(this.stFill, STAMINA_FILL, s.stamina / s.maxStamina);
+    // barra de voo: só com as asas, e quando está no ar ou ainda recarregando
+    const f = s.flight;
+    this.flyBar.hidden = !f || (!f.airborne && f.ratio >= 1);
+    if (f) {
+      this.flyFill.style.width = `${f.ratio * 100}%`;
+      this.flyBar.classList.toggle('gliding', f.gliding);
+      this.flyLabel.textContent = f.gliding ? 'Planando' : `Voo ${Math.ceil(f.ratio * 10)}s`;
+    }
     this.hpText.textContent = String(Math.ceil(s.hp));
     this.potionCount.textContent = String(s.potions);
     this.potionSlot.classList.toggle('off', s.potions === 0);

@@ -263,3 +263,12 @@ body { background: var(--sky); color: var(--ink); overflow: hidden; user-select:
 .shop-item, .shop-price { display: flex; align-items: center; gap: 8px; font: 700 15px var(--font); }
 .shop-item .ui-icon { width: 36px; height: 36px; }
 @media (max-width: 600px) { .shop-offer { grid-template-columns: 1fr auto; } .shop-offer .ui-btn { grid-column: 1 / -1; } }
+
+/* ---------- barra de voo (Asas de Ícaro) ---------- */
+.flybar { position: relative; width: 240px; max-width: 32vw; height: 18px; margin-left: 4px; background: var(--paper);
+  border: var(--line); border-radius: 999px; box-shadow: var(--shadow); overflow: hidden; }
+.flybar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#bfe9ff, #6cc4ff); transition: width .1s; }
+.flybar b { position: absolute; inset: 0; display: grid; place-items: center; font: 700 12px var(--font); color: var(--ink); }
+.flybar.gliding { background: #fff3d1; animation: glide-pulse .6s ease-in-out infinite alternate; }
+@keyframes glide-pulse { to { background: #d9f1ff; } }
+@media (prefers-reduced-motion: reduce) { .flybar.gliding { animation: none; } }

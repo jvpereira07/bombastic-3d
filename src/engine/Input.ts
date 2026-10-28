@@ -54,6 +54,9 @@ export class Input {
   }
 
   /** Ataque sendo segurado: botão esquerdo (travado) ou F/J. */
+  /** Espaço segurado (asas: voar/planar). */
+  jumpHeld(): boolean { return !this.blocked() && this.isDown('Space'); }
+
   primaryHeld(): boolean { return !this.blocked() && (this.mouseHeld || this.isDown('KeyF', 'KeyJ')); }
 
   get locked(): boolean { return document.pointerLockElement === this.canvas; }

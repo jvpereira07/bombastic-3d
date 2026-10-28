@@ -20,6 +20,8 @@ export class Sfx {
     this.audio.tone({ f: 520, f2: 140, type: 'triangle', dur: 0.12, vol: 0.18 });
     this.audio.noise({ dur: 0.18, freq: 4000, f2: 1200, vol: 0.12, q: 0.7 });
   }
+  /** Batida de asa: sopro grave e curto. */
+  flap(): void { this.audio.noise({ dur: 0.12, freq: 500, f2: 180, vol: 0.12, q: 0.6 }); }
   slash(): void { this.audio.noise({ dur: 0.13, freq: 3000, f2: 700, vol: 0.22, q: 0.8 }); }
   /** "!" de um mob que notou o jogador: dois bipes subindo. */
   alert(): void {

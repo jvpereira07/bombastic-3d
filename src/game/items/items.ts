@@ -1,8 +1,8 @@
 import type { BootPalette } from '../entities/bootSprites';
 import type { Player } from '../entities/Player';
 
-export type ItemId = 'potion' | 'sombrero' | 'sword' | 'maraca' | 'bow' | 'waterBoots' | 'wingBoots' | 'springBoots';
-export type Ability = 'dash' | 'waterWalk' | 'doubleJump' | 'bounce';
+export type ItemId = 'potion' | 'sombrero' | 'sword' | 'maraca' | 'bow' | 'waterBoots' | 'wingBoots' | 'springBoots' | 'icarusWings';
+export type Ability = 'dash' | 'waterWalk' | 'doubleJump' | 'bounce' | 'flight';
 /** Onde um equipamento (que não é arma) é vestido. */
 export type GearKind = 'head' | 'chest' | 'legs' | 'feet' | 'accessory';
 /** Armas que vão na mão (duas por vez: uma na mão, a outra nas costas). */
@@ -37,6 +37,11 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   springBoots: {
     id: 'springBoots', name: 'Bota Trampolim', description: 'Ao cair de um pulo, quica de volta bem mais alto.', icon: 'bota_mola', maxStack: 1,
     kind: 'equipment', grants: ['bounce'], gear: 'feet', boots: { dark: 0x3a0f0f, base: 0xd23a32, light: 0xf5c518 },
+  },
+  icarusWings: {
+    id: 'icarusWings', name: 'Asas de Ícaro', icon: 'asas_icaro', maxStack: 1,
+    description: 'Segure Espaço no ar para voar por até 10 s; acabou o voo e ainda segurando, plana. Recarrega no chão.',
+    kind: 'equipment', grants: ['flight'], gear: 'accessory',
   },
   sword: {
     id: 'sword', name: 'Espada', description: 'Corte de perto em combo de 3 golpes; o último empurra forte.', icon: 'sword', maxStack: 1,

@@ -23,6 +23,12 @@ export const PLAYER = {
  * Combo de 3 golpes: apertar de novo no fim de um golpe (BUFFER, fração da animação) ou logo depois (WINDOW, s)
  * emenda o próximo; senão volta ao primeiro. Cada etapa tem dano, empurrão (x) e avanço (m/s) próprios.
  */
+/**
+ * Asas de Ícaro: segurando Espaço no ar sobe até RISE m/s, gastando o tempo de voo (FLIGHT s);
+ * sem tempo e ainda segurando, plana caindo no máximo GLIDE_FALL m/s. No chão recarrega em RECHARGE s.
+ */
+export const WINGS = { FLIGHT: 10, RISE: 5, LIFT: 22, GLIDE_FALL: 1.6, RECHARGE: 2.5, FLAP_EVERY: 0.3 } as const;
+
 export const COMBO = {
   BUFFER: 0.45, WINDOW: 0.32, FINISHER_RECOVERY: 0.18,
   DAMAGE: [1, 1, 2], KNOCKBACK: [0.7, 0.9, 1.5], LUNGE: [4, 4.5, 8], SLASH_SIZE: [2.4, 2.4, 3.2],

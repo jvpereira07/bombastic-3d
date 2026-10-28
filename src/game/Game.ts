@@ -11,7 +11,7 @@ import { MusicNote } from './boss/MusicNote';
 import { MrKabumstic } from './boss/MrKabumstic';
 import { Paratrooper } from './boss/Paratrooper';
 import { RatPlane } from './boss/RatPlane';
-import { BOSS, COIN, PLAYER } from './config';
+import { BOSS, COIN, PLAYER, WINGS } from './config';
 import { BombRat } from './entities/BombRat';
 import type { Entity, Hittable } from './entities/Entity';
 import { Explosion } from './entities/Explosion';
@@ -234,7 +234,9 @@ export class Game {
     this.remotes.render(performance.now() / 1000, this.camera.yaw, this.engine.camera.position);
 
     const p = this.player.pos, ground = this.world.groundAt(p.x, p.z);
-    this.camera.update(dt, p.clone().setY(ground + (p.y - ground) * 0.5 + 1.8)); // só metade do pulo, para não sacudir
+    // pulo baixo: a câmera sobe só metade, para não sacudir; voando alto (asas), acompanha a altura toda
+    const air = p.y - ground, follow = air < 3 ? air * 0.5 : air - 1.5;
+    this.camera.update(dt, p.clone().setY(ground + follow + 1.8));
 
     this.lockOn.update(dt);
     this.trackDamage();
@@ -258,6 +260,10 @@ export class Game {
       coins: this.player.coins,
       prompt: this.player.dead ? null : this.vendorNear() ? 'E · falar com o vendedor' : this.world.manholeNear(p) ? 'E · usar a tampa do esgoto' : null,
       comboStage: this.player.comboStage,
+      flight: this.player.inventory.hasAbility('flight') ? {
+        ratio: this.player.flightLeft / WINGS.FLIGHT, gliding: this.player.flightMode === 'glide',
+        airborne: this.player.pos.y > this.world.groundUnder(this.player.pos) + 0.05,
+      } : null,
     });
   }
 
@@ -373,6 +379,7 @@ export class Game {
     this.dropItem('waterBoots', -3, -7);
     this.dropItem('wingBoots', 0, -7);
     this.dropItem('springBoots', 3, -7);
+    this.dropItem('icarusWings', 6, -7);
     this.spawn(new Gator(this, TestArena.RIVER_X, 0));
     this.input.onKey(['KeyR'], () => {
       const a = Math.random() * Math.PI * 2, p = this.player.pos;
@@ -405,5 +412,12 @@ export class Game {
     this.dropItem('waterBoots', -8, -3);
     this.dropItem('wingBoots', -4, 8);
     this.dropItem('springBoots', 9, -2);
+    // asas: no ponto mais alto entre 40 e 90 m do início (um desafio de escalada)
+    let peak = { x: 40, z: 40, h: -Infinity };
+    for (let k = 0; k < 300; k++) {
+      const a = Math.random() * Math.PI * 2, r = rnd(40, 90), x = Math.cos(a) * r, z = Math.sin(a) * r, h = Overworld.height(x, z);
+      if (h > peak.h && !Overworld.isWater(x, z)) peak = { x, z, h };
+    }
+    this.dropItem('icarusWings', peak.x, peak.z);
   }
 }
